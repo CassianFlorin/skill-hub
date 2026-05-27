@@ -479,11 +479,13 @@ func ListRegistries(cfg config.Config) []RegistryStatus {
 }
 
 type CatalogFilter struct {
-	Registry string
-	Target   string
-	Tag      string
-	Featured *bool
-	Official bool
+	Registry  string
+	Target    string
+	Tag       string
+	Namespace string
+	Trust     string
+	Featured  *bool
+	Official  bool
 }
 
 func ListCatalog(cfg config.Config, filter CatalogFilter) ([]SearchResult, error) {
@@ -514,6 +516,12 @@ func ListCatalog(cfg config.Config, filter CatalogFilter) ([]SearchResult, error
 				continue
 			}
 			if filter.Tag != "" && !contains(indexed.Tags, filter.Tag) {
+				continue
+			}
+			if filter.Namespace != "" && indexed.Namespace != filter.Namespace {
+				continue
+			}
+			if filter.Trust != "" && indexed.Trust.Level != filter.Trust {
 				continue
 			}
 			results = append(results, SearchResult{Registry: name, Skill: indexed})

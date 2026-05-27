@@ -22,6 +22,9 @@ skillhub catalog featured
 skillhub catalog list --target codex --tag java
 skillhub catalog tags --registry hub
 skillhub catalog targets --registry hub
+skillhub catalog namespaces --registry hub
+skillhub catalog trust --registry hub
+skillhub catalog list --registry hub --namespace official --trust official
 skillhub catalog list --registry hub --json
 skillhub search java
 skillhub search git --json
@@ -54,6 +57,9 @@ skillhub catalog list --registry hub --target claude
 skillhub catalog list --registry hub --tag git
 skillhub catalog tags --registry hub
 skillhub catalog targets --registry hub
+skillhub catalog namespaces --registry hub
+skillhub catalog trust --registry hub
+skillhub catalog list --registry hub --namespace official --trust official
 skillhub search git
 skillhub info hub/official/git-commit-cn
 ```
@@ -226,6 +232,8 @@ Registry index example:
 ./skillhub catalog list --registry company
 ./skillhub catalog tags --registry company
 ./skillhub catalog targets --registry company
+./skillhub catalog namespaces --registry company
+./skillhub catalog trust --registry company
 ./skillhub search java
 ./skillhub info company/platform-team/java-review
 ./skillhub install company/platform-team/java-review

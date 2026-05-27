@@ -277,7 +277,7 @@ func runRegistrySync(args []string, stdout io.Writer, workDir string) error {
 
 func runCatalog(args []string, stdout io.Writer, workDir string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: skillhub catalog <list|featured|tags|targets>")
+		return fmt.Errorf("usage: skillhub catalog <list|featured|tags|targets|namespaces|trust>")
 	}
 	switch args[0] {
 	case "list":
@@ -288,8 +288,12 @@ func runCatalog(args []string, stdout io.Writer, workDir string) error {
 		return runCatalogAggregate(args[1:], stdout, workDir, "tags")
 	case "targets":
 		return runCatalogAggregate(args[1:], stdout, workDir, "targets")
+	case "namespaces":
+		return runCatalogAggregate(args[1:], stdout, workDir, "namespaces")
+	case "trust":
+		return runCatalogAggregate(args[1:], stdout, workDir, "trust")
 	default:
-		return fmt.Errorf("usage: skillhub catalog <list|featured|tags|targets>")
+		return fmt.Errorf("usage: skillhub catalog <list|featured|tags|targets|namespaces|trust>")
 	}
 }
 
@@ -322,6 +326,18 @@ func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnl
 				return fmt.Errorf("--tag requires a value")
 			}
 			filter.Tag = args[i]
+		case "--namespace":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--namespace requires a value")
+			}
+			filter.Namespace = args[i]
+		case "--trust":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--trust requires a value")
+			}
+			filter.Trust = args[i]
 		case "--featured":
 			featured := true
 			filter.Featured = &featured
@@ -527,8 +543,13 @@ func aggregateCatalog(results []registry.SearchResult, kind string) []catalogCou
 	countMap := map[string]int{}
 	for _, result := range results {
 		values := result.Skill.Tags
-		if kind == "targets" {
+		switch kind {
+		case "targets":
 			values = result.Skill.Targets
+		case "namespaces":
+			values = []string{result.Skill.Namespace}
+		case "trust":
+			values = []string{result.Skill.Trust.Level}
 		}
 		for _, value := range values {
 			countMap[value]++

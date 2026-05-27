@@ -1112,6 +1112,16 @@ func TestCatalogTagsAndTargetsShowAggregateCounts(t *testing.T) {
 	runOK(t, projectDir, &stdout, "catalog", "targets", "--registry", "company")
 	assertContains(t, stdout.String(), "codex\t3")
 	assertContains(t, stdout.String(), "claude\t2")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "namespaces", "--registry", "company")
+	assertContains(t, stdout.String(), "official\t2")
+	assertContains(t, stdout.String(), "community\t1")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "trust", "--registry", "company")
+	assertContains(t, stdout.String(), "official\t2")
+	assertContains(t, stdout.String(), "community\t1")
 }
 
 func TestCatalogTagsTargetsAndListSupportJSON(t *testing.T) {
@@ -1140,6 +1150,18 @@ func TestCatalogTagsTargetsAndListSupportJSON(t *testing.T) {
 	assertJSONCount(t, targets, "codex", 3)
 
 	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "namespaces", "--registry", "company", "--json")
+	var namespaces []map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &namespaces)
+	assertJSONCount(t, namespaces, "official", 2)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "trust", "--registry", "company", "--json")
+	var trusts []map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &trusts)
+	assertJSONCount(t, trusts, "community", 1)
+
+	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "list", "--registry", "company", "--json")
 	var listed []map[string]any
 	mustUnmarshalJSON(t, stdout.String(), &listed)
@@ -1153,6 +1175,31 @@ func TestCatalogTagsTargetsAndListSupportJSON(t *testing.T) {
 	if !ok || skill["identity"] == "" {
 		t.Fatalf("expected nested skill identity in JSON output, got %#v", listed[0])
 	}
+}
+
+func TestCatalogListSupportsNamespaceAndTrustFilters(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeDiscoveryIndex(t, registryDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "list", "--registry", "company", "--namespace", "community")
+	assertContains(t, stdout.String(), "company/community/aaa-helper")
+	assertNotContains(t, stdout.String(), "official/git-commit-cn")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "list", "--registry", "company", "--trust", "official")
+	assertContains(t, stdout.String(), "company/official/git-commit-cn")
+	assertContains(t, stdout.String(), "company/official/repo-code-review")
+	assertNotContains(t, stdout.String(), "community/aaa-helper")
 }
 
 func TestSearchJSONAndRankingPreferNameTagFeaturedOfficial(t *testing.T) {
