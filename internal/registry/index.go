@@ -90,7 +90,7 @@ func SearchIndexes(cfg config.Config, query string) ([]SearchResult, error) {
 			}
 		}
 	}
-	sortSearchResults(results)
+	sortSearchResultsByQuery(results, query)
 	return results, nil
 }
 
@@ -529,6 +529,51 @@ func sortSearchResults(results []SearchResult) {
 		right := results[j].Registry + "/" + results[j].Skill.Identity
 		return left < right
 	})
+}
+
+func sortSearchResultsByQuery(results []SearchResult, query string) {
+	sort.Slice(results, func(i, j int) bool {
+		leftScore := matchScore(results[i].Skill, query)
+		rightScore := matchScore(results[j].Skill, query)
+		if leftScore != rightScore {
+			return leftScore < rightScore
+		}
+		if results[i].Skill.Featured != results[j].Skill.Featured {
+			return results[i].Skill.Featured
+		}
+		leftOfficial := results[i].Skill.Trust.Level == TrustOfficial
+		rightOfficial := results[j].Skill.Trust.Level == TrustOfficial
+		if leftOfficial != rightOfficial {
+			return leftOfficial
+		}
+		left := results[i].Registry + "/" + results[i].Skill.Identity
+		right := results[j].Registry + "/" + results[j].Skill.Identity
+		return left < right
+	})
+}
+
+func matchScore(indexed IndexSkill, query string) int {
+	identity := strings.ToLower(indexed.Identity)
+	name := strings.ToLower(indexed.Name)
+	if identity == query || name == query {
+		return 0
+	}
+	if strings.HasPrefix(identity, query) || strings.HasPrefix(name, query) {
+		return 1
+	}
+	for _, tag := range indexed.Tags {
+		tag = strings.ToLower(tag)
+		if tag == query {
+			return 2
+		}
+		if strings.Contains(tag, query) {
+			return 3
+		}
+	}
+	if strings.Contains(strings.ToLower(indexed.Description), query) {
+		return 4
+	}
+	return 5
 }
 
 func contains(values []string, want string) bool {

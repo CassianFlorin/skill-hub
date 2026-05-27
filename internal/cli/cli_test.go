@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1057,6 +1058,145 @@ func TestCatalogListSupportsFeaturedAndOfficialFilters(t *testing.T) {
 	assertNotContains(t, stdout.String(), "community/git-helper")
 }
 
+func TestCatalogTagsAndTargetsShowAggregateCounts(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeDiscoveryIndex(t, registryDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "tags", "--registry", "company")
+	assertContains(t, stdout.String(), "git\t1")
+	assertContains(t, stdout.String(), "review\t1")
+	assertContains(t, stdout.String(), "skill\t1")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "targets", "--registry", "company")
+	assertContains(t, stdout.String(), "codex\t3")
+	assertContains(t, stdout.String(), "claude\t2")
+}
+
+func TestCatalogTagsTargetsAndListSupportJSON(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeDiscoveryIndex(t, registryDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "tags", "--registry", "company", "--json")
+	var tags []map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &tags)
+	assertJSONCount(t, tags, "git", 1)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "targets", "--registry", "company", "--json")
+	var targets []map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &targets)
+	assertJSONCount(t, targets, "codex", 3)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "list", "--registry", "company", "--json")
+	var listed []map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &listed)
+	if len(listed) != 3 {
+		t.Fatalf("expected 3 catalog results, got %#v", listed)
+	}
+	if listed[0]["registry"] != "company" {
+		t.Fatalf("expected registry in JSON output, got %#v", listed[0])
+	}
+	skill, ok := listed[0]["skill"].(map[string]any)
+	if !ok || skill["identity"] == "" {
+		t.Fatalf("expected nested skill identity in JSON output, got %#v", listed[0])
+	}
+}
+
+func TestSearchJSONAndRankingPreferNameTagFeaturedOfficial(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeDiscoveryIndex(t, registryDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "search", "git")
+
+	lines := nonEmptyLines(stdout.String())
+	if len(lines) < 2 {
+		t.Fatalf("expected multiple search results, got %q", stdout.String())
+	}
+	if !strings.HasPrefix(lines[0], "company/official/git-commit-cn") {
+		t.Fatalf("expected name/tag official result first, got %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "company/community/aaa-helper") {
+		t.Fatalf("expected description-only result after stronger match, got %q", lines[1])
+	}
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "search", "git", "--json")
+	var results []map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &results)
+	firstSkill := results[0]["skill"].(map[string]any)
+	if firstSkill["identity"] != "official/git-commit-cn" {
+		t.Fatalf("expected first JSON result to be official/git-commit-cn, got %#v", firstSkill)
+	}
+}
+
+func TestInfoSupportsJSONAndReadableInstallDecisionFields(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeDiscoveryIndex(t, registryDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "info", "company/official/git-commit-cn")
+
+	assertContains(t, stdout.String(), "install: skillhub install company/official/git-commit-cn")
+	assertContains(t, stdout.String(), "trust: official")
+	assertContains(t, stdout.String(), "trust.reviewed_at: 2026-05-27")
+	assertContains(t, stdout.String(), "targets: codex")
+	assertContains(t, stdout.String(), "tags: git, commit, chinese")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "info", "company/official/git-commit-cn", "--json")
+	var info map[string]any
+	mustUnmarshalJSON(t, stdout.String(), &info)
+	if info["registry"] != "company" {
+		t.Fatalf("expected registry in info JSON, got %#v", info)
+	}
+	if info["install_command"] != "skillhub install company/official/git-commit-cn" {
+		t.Fatalf("expected install command in info JSON, got %#v", info)
+	}
+	skill := info["skill"].(map[string]any)
+	if skill["identity"] != "official/git-commit-cn" {
+		t.Fatalf("expected skill identity in info JSON, got %#v", skill)
+	}
+}
+
 func TestInstallFromCatalogExternalGitSource(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")
@@ -1784,6 +1924,64 @@ func mustWriteIndex(t *testing.T, root string, registry string, identity string,
 `)+"\n")
 }
 
+func writeDiscoveryIndex(t *testing.T, root string) {
+	t.Helper()
+	mustWriteFile(t, filepath.Join(root, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "community/aaa-helper",
+      "name": "aaa-helper",
+      "namespace": "community",
+      "version": "0.1.0",
+      "description": "Write better git workflow notes.",
+      "targets": ["codex", "claude"],
+      "tags": ["workflow"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "aaa-helper"},
+      "maintainers": ["Community"],
+      "license": "MIT",
+      "trust": {"level": "community"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    },
+    {
+      "identity": "official/git-commit-cn",
+      "name": "git-commit-cn",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "Generate concise Chinese Git commit messages.",
+      "targets": ["codex"],
+      "tags": ["git", "commit", "chinese"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "git-commit-cn", "ref": "v0.1.0"},
+      "maintainers": ["CassianFlorin"],
+      "license": "MIT",
+      "trust": {"level": "official", "reviewed_at": "2026-05-27", "reviewer": "CassianFlorin"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    },
+    {
+      "identity": "official/repo-code-review",
+      "name": "repo-code-review",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "Review repository changes.",
+      "targets": ["codex", "claude"],
+      "tags": ["review", "skill"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "repo-code-review"},
+      "maintainers": ["CassianFlorin"],
+      "license": "MIT",
+      "trust": {"level": "official", "reviewed_at": "2026-05-27", "reviewer": "CassianFlorin"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -1861,6 +2059,37 @@ func assertNotContains(t *testing.T, got string, want string) {
 	if strings.Contains(got, want) {
 		t.Fatalf("expected %q not to contain %q", got, want)
 	}
+}
+
+func nonEmptyLines(content string) []string {
+	var lines []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func mustUnmarshalJSON(t *testing.T, content string, out any) {
+	t.Helper()
+	if err := json.Unmarshal([]byte(content), out); err != nil {
+		t.Fatalf("invalid JSON %q: %v", content, err)
+	}
+}
+
+func assertJSONCount(t *testing.T, rows []map[string]any, name string, want int) {
+	t.Helper()
+	for _, row := range rows {
+		if row["name"] == name {
+			got, ok := row["count"].(float64)
+			if !ok || int(got) != want {
+				t.Fatalf("expected %s count %d, got %#v", name, want, row)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected JSON count for %s in %#v", name, rows)
 }
 
 func withoutLinesContaining(content string, markers ...string) string {

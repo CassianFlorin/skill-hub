@@ -18,8 +18,13 @@ skillhub registry index validate company
 skillhub catalog list
 skillhub catalog featured
 skillhub catalog list --target codex --tag java
+skillhub catalog tags --registry hub
+skillhub catalog targets --registry hub
+skillhub catalog list --registry hub --json
 skillhub search java
+skillhub search git --json
 skillhub info company/platform-team/java-review
+skillhub info company/platform-team/java-review --json
 skillhub install company/java-review
 skillhub install company/java-review@1.2.0
 skillhub install ./examples/local-registry/java-review
@@ -37,6 +42,32 @@ The CLI supports local registry installation, git registry installation, and cat
 ## Catalog discovery
 
 `skillhub init` configures the default `hub` registry at `https://github.com/CassianFlorin/skill-hub-registry.git`. Run `skillhub registry sync hub` to clone or refresh it locally, then use `skillhub catalog featured`, `skillhub catalog list`, `skillhub search <query>`, and `skillhub info <registry>/<identity>` to discover installable skills.
+
+Discovery commands:
+
+```bash
+skillhub catalog featured --registry hub
+skillhub catalog list --registry hub --target codex
+skillhub catalog list --registry hub --target claude
+skillhub catalog list --registry hub --tag git
+skillhub catalog tags --registry hub
+skillhub catalog targets --registry hub
+skillhub search git
+skillhub info hub/official/git-commit-cn
+```
+
+`search` ranks stronger matches first: exact or prefix identity/name matches, then tag matches, then description matches, with featured and official skills preferred when the match strength is otherwise equal.
+
+For automation, catalog, search, and info commands support JSON output:
+
+```bash
+skillhub catalog list --registry hub --json
+skillhub catalog featured --registry hub --json
+skillhub catalog tags --registry hub --json
+skillhub catalog targets --registry hub --json
+skillhub search git --json
+skillhub info hub/official/git-commit-cn --json
+```
 
 Registries use `skillhub.index.json` schema v2. Old index files without `schema_version: "2"` are rejected by validation.
 
@@ -189,6 +220,8 @@ Registry index example:
 ./skillhub registry index validate company
 ./skillhub registry list
 ./skillhub catalog list --registry company
+./skillhub catalog tags --registry company
+./skillhub catalog targets --registry company
 ./skillhub search java
 ./skillhub info company/platform-team/java-review
 ./skillhub install company/platform-team/java-review

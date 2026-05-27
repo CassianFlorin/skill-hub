@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/cassian/skill-hub/internal/config"
@@ -232,26 +234,33 @@ func runRegistrySync(args []string, stdout io.Writer, workDir string) error {
 
 func runCatalog(args []string, stdout io.Writer, workDir string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: skillhub catalog <list|featured>")
+		return fmt.Errorf("usage: skillhub catalog <list|featured|tags|targets>")
 	}
 	switch args[0] {
 	case "list":
 		return runCatalogList(args[1:], stdout, workDir, false)
 	case "featured":
 		return runCatalogList(args[1:], stdout, workDir, true)
+	case "tags":
+		return runCatalogAggregate(args[1:], stdout, workDir, "tags")
+	case "targets":
+		return runCatalogAggregate(args[1:], stdout, workDir, "targets")
 	default:
-		return fmt.Errorf("usage: skillhub catalog <list|featured>")
+		return fmt.Errorf("usage: skillhub catalog <list|featured|tags|targets>")
 	}
 }
 
 func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnly bool) error {
 	filter := registry.CatalogFilter{}
+	jsonOutput := false
 	if featuredOnly {
 		featured := true
 		filter.Featured = &featured
 	}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--json":
+			jsonOutput = true
 		case "--registry":
 			i++
 			if i >= len(args) {
@@ -287,6 +296,9 @@ func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnl
 	if err != nil {
 		return err
 	}
+	if jsonOutput {
+		return writeJSON(stdout, catalogJSONResults(results))
+	}
 	if len(results) == 0 {
 		_, _ = fmt.Fprintln(stdout, "no catalog skills found")
 		return nil
@@ -297,17 +309,67 @@ func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnl
 	return nil
 }
 
-func runSearch(args []string, stdout io.Writer, workDir string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: skillhub search <query>")
+func runCatalogAggregate(args []string, stdout io.Writer, workDir string, kind string) error {
+	filter := registry.CatalogFilter{}
+	jsonOutput := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--registry":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--registry requires a value")
+			}
+			filter.Registry = args[i]
+		default:
+			return fmt.Errorf("unknown catalog option %q", args[i])
+		}
 	}
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
 	}
-	results, err := registry.SearchIndexes(cfg, args[0])
+	results, err := registry.ListCatalog(cfg, filter)
 	if err != nil {
 		return err
+	}
+	counts := aggregateCatalog(results, kind)
+	if jsonOutput {
+		return writeJSON(stdout, counts)
+	}
+	if len(counts) == 0 {
+		_, _ = fmt.Fprintf(stdout, "no catalog %s found\n", kind)
+		return nil
+	}
+	for _, count := range counts {
+		_, _ = fmt.Fprintf(stdout, "%s\t%d\n", count.Name, count.Count)
+	}
+	return nil
+}
+
+func runSearch(args []string, stdout io.Writer, workDir string) error {
+	if len(args) < 1 || len(args) > 2 {
+		return fmt.Errorf("usage: skillhub search <query> [--json]")
+	}
+	query := args[0]
+	jsonOutput := false
+	if len(args) == 2 {
+		if args[1] != "--json" {
+			return fmt.Errorf("usage: skillhub search <query> [--json]")
+		}
+		jsonOutput = true
+	}
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	results, err := registry.SearchIndexes(cfg, query)
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
+		return writeJSON(stdout, catalogJSONResults(results))
 	}
 	if len(results) == 0 {
 		_, _ = fmt.Fprintln(stdout, "no skills found")
@@ -320,21 +382,37 @@ func runSearch(args []string, stdout io.Writer, workDir string) error {
 }
 
 func runInfo(args []string, stdout io.Writer, workDir string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: skillhub info <registry/identity|identity>")
+	if len(args) < 1 || len(args) > 2 {
+		return fmt.Errorf("usage: skillhub info <registry/identity|identity> [--json]")
+	}
+	spec := args[0]
+	jsonOutput := false
+	if len(args) == 2 {
+		if args[1] != "--json" {
+			return fmt.Errorf("usage: skillhub info <registry/identity|identity> [--json]")
+		}
+		jsonOutput = true
 	}
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
 	}
-	result, ok, err := registry.FindIndexedSkill(cfg, args[0])
+	result, ok, err := registry.FindIndexedSkill(cfg, spec)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("skill %q not found", args[0])
+		return fmt.Errorf("skill %q not found", spec)
 	}
 	indexed := result.Skill
+	installCommand := fmt.Sprintf("skillhub install %s/%s", result.Registry, indexed.Identity)
+	if jsonOutput {
+		return writeJSON(stdout, infoJSONResult{
+			Registry:       result.Registry,
+			Skill:          indexed,
+			InstallCommand: installCommand,
+		})
+	}
 	_, _ = fmt.Fprintf(stdout, "identity: %s\n", indexed.Identity)
 	_, _ = fmt.Fprintf(stdout, "registry: %s\n", result.Registry)
 	_, _ = fmt.Fprintf(stdout, "name: %s\n", indexed.Name)
@@ -355,7 +433,7 @@ func runInfo(args []string, stdout io.Writer, workDir string) error {
 	_, _ = fmt.Fprintf(stdout, "featured: %t\n", indexed.Featured)
 	_, _ = fmt.Fprintf(stdout, "updated_at: %s\n", indexed.UpdatedAt)
 	_, _ = fmt.Fprintf(stdout, "checksum: %s\n", indexed.Checksum)
-	_, _ = fmt.Fprintf(stdout, "install: skillhub install %s/%s\n", result.Registry, indexed.Identity)
+	_, _ = fmt.Fprintf(stdout, "install: %s\n", installCommand)
 	return nil
 }
 
@@ -376,6 +454,60 @@ func formatCatalogResult(result registry.SearchResult) string {
 		featuredLabel(result.Skill.Featured),
 		result.Skill.Description,
 	)
+}
+
+type catalogJSONResult struct {
+	Registry string              `json:"registry"`
+	Skill    registry.IndexSkill `json:"skill"`
+}
+
+type infoJSONResult struct {
+	Registry       string              `json:"registry"`
+	Skill          registry.IndexSkill `json:"skill"`
+	InstallCommand string              `json:"install_command"`
+}
+
+type catalogCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+func catalogJSONResults(results []registry.SearchResult) []catalogJSONResult {
+	jsonResults := make([]catalogJSONResult, 0, len(results))
+	for _, result := range results {
+		jsonResults = append(jsonResults, catalogJSONResult{Registry: result.Registry, Skill: result.Skill})
+	}
+	return jsonResults
+}
+
+func aggregateCatalog(results []registry.SearchResult, kind string) []catalogCount {
+	countMap := map[string]int{}
+	for _, result := range results {
+		values := result.Skill.Tags
+		if kind == "targets" {
+			values = result.Skill.Targets
+		}
+		for _, value := range values {
+			countMap[value]++
+		}
+	}
+	counts := make([]catalogCount, 0, len(countMap))
+	for name, count := range countMap {
+		counts = append(counts, catalogCount{Name: name, Count: count})
+	}
+	sort.Slice(counts, func(i, j int) bool {
+		if counts[i].Count != counts[j].Count {
+			return counts[i].Count > counts[j].Count
+		}
+		return counts[i].Name < counts[j].Name
+	})
+	return counts
+}
+
+func writeJSON(stdout io.Writer, value any) error {
+	encoder := json.NewEncoder(stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
 }
 
 func runList(stdout io.Writer) error {
