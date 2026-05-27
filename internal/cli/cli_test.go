@@ -487,6 +487,44 @@ func TestRegistryIndexValidateRejectsUnsupportedTarget(t *testing.T) {
 	assertContains(t, err.Error(), `unsupported target "unknown-runtime"`)
 }
 
+func TestRegistryIndexValidateAcceptsGeminiTarget(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/gemini-review",
+      "name": "gemini-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Gemini review skill",
+      "targets": ["gemini"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "gemini-review"},
+      "trust": {"level": "curated"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "validate", "company")
+
+	assertContains(t, stdout.String(), "validated company with 1 skills")
+}
+
 func TestRegistryIndexValidateRequiresFeaturedSkillQualityFields(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")
@@ -1594,6 +1632,37 @@ targets:
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"claude"`)
 }
 
+func TestDeployGeminiCopiesInstalledSkill(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	geminiDir := filepath.Join(workspace, "gemini-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_GEMINI_DIR", geminiDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - gemini
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "gemini", "local/my-skill")
+
+	assertContains(t, stdout.String(), "deployed local/my-skill to gemini")
+	assertFileContains(t, filepath.Join(geminiDir, "local__my-skill", "SKILL.md"), "# Local Skill")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"gemini"`)
+}
+
 func TestDeployRejectsExplicitUnsupportedRuntimeTarget(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")
@@ -1832,11 +1901,13 @@ func TestDeployStatusReportsRuntimeState(t *testing.T) {
 	home := filepath.Join(workspace, "skillhub-home")
 	codexDir := filepath.Join(workspace, "codex-skills")
 	claudeDir := filepath.Join(workspace, "claude-skills")
+	geminiDir := filepath.Join(workspace, "gemini-skills")
 	projectDir := filepath.Join(workspace, "project")
 	localSkill := filepath.Join(workspace, "my-skill")
 	t.Setenv("SKILLHUB_HOME", home)
 	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
 	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+	t.Setenv("SKILLHUB_GEMINI_DIR", geminiDir)
 
 	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
 name: my-skill
@@ -1857,6 +1928,7 @@ entry: SKILL.md
 	runOK(t, projectDir, &stdout, "deploy", "status")
 	assertContains(t, stdout.String(), "local/my-skill\tcodex\tdeployed")
 	assertContains(t, stdout.String(), "local/my-skill\tclaude\tmissing")
+	assertContains(t, stdout.String(), "local/my-skill\tgemini\tmissing")
 
 	mustWriteFile(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Drifted\n")
 	stdout.Reset()
@@ -1943,11 +2015,13 @@ func TestUninstallWithDeployedRemovesRuntimeCopies(t *testing.T) {
 	home := filepath.Join(workspace, "skillhub-home")
 	codexDir := filepath.Join(workspace, "codex-skills")
 	claudeDir := filepath.Join(workspace, "claude-skills")
+	geminiDir := filepath.Join(workspace, "gemini-skills")
 	projectDir := filepath.Join(workspace, "project")
 	localSkill := filepath.Join(workspace, "my-skill")
 	t.Setenv("SKILLHUB_HOME", home)
 	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
 	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+	t.Setenv("SKILLHUB_GEMINI_DIR", geminiDir)
 
 	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
 name: my-skill
@@ -1966,12 +2040,15 @@ entry: SKILL.md
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "claude", "local/my-skill", "--force")
 	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "gemini", "local/my-skill", "--force")
+	stdout.Reset()
 	runOK(t, projectDir, &stdout, "uninstall", "local/my-skill", "--deployed")
 
 	assertContains(t, stdout.String(), "uninstalled local/my-skill")
 	assertPathMissing(t, filepath.Join(home, "installed", "local__my-skill"))
 	assertPathMissing(t, filepath.Join(codexDir, "local__my-skill"))
 	assertPathMissing(t, filepath.Join(claudeDir, "local__my-skill"))
+	assertPathMissing(t, filepath.Join(geminiDir, "local__my-skill"))
 }
 
 func writeGitSkill(t *testing.T, root string, name string, version string, description string) {

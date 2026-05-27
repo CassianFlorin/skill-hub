@@ -40,6 +40,7 @@ skillhub list
 skillhub update
 skillhub deploy codex
 skillhub deploy claude
+skillhub deploy gemini
 skillhub deploy status
 ```
 
@@ -140,6 +141,7 @@ Existing Skill directories that only contain `SKILL.md` can still be installed. 
 - Lockfile: `$SKILLHUB_HOME/skillhub.lock`
 - Codex deploy target: `$SKILLHUB_CODEX_DIR`, defaulting to `~/.codex/skills`
 - Claude deploy target: `$SKILLHUB_CLAUDE_DIR`, defaulting to `~/.claude/skills`
+- Gemini deploy target: `$SKILLHUB_GEMINI_DIR`, defaulting to `~/.gemini/skills`
 
 `skillhub.yaml` and `skillhub.lock` are JSON documents with YAML-compatible filenames for this MVP. That keeps the first version dependency-free while preserving the intended file names.
 
@@ -164,6 +166,7 @@ description: Java review skill
 entry: SKILL.md
 targets:
   - codex
+  - gemini
 tags:
   - java
 ```
@@ -181,6 +184,7 @@ Example local run without touching real user state:
 export SKILLHUB_HOME="$PWD/.skillhub-e2e/home"
 export SKILLHUB_CODEX_DIR="$PWD/.skillhub-e2e/codex"
 export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
+export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 ./skillhub init
 ./skillhub version
 ./skillhub doctor
@@ -230,7 +234,7 @@ Uninstall examples:
 ./skillhub uninstall platform-team/java-review --deployed
 ```
 
-By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex and Claude runtime copies.
+By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, and Gemini runtime copies.
 
 Registry index example:
 
@@ -249,13 +253,16 @@ Registry index example:
 ./skillhub install company/platform-team/java-review
 ```
 
-Claude deploy example:
+Claude and Gemini deploy examples:
 
 ```bash
 export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
+export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 ./skillhub deploy claude platform-team/java-review --force
+./skillhub deploy gemini platform-team/java-review --force
 ./skillhub deploy status
 ./skillhub deploy status codex
+./skillhub deploy status gemini
 ```
 
 Deploy respects the installed Skill `targets` metadata. Skills with no targets are treated as compatible with all supported runtimes for backward compatibility. In batch deploys, unsupported skills are skipped; explicitly deploying an unsupported skill to a runtime returns an error.
@@ -265,6 +272,7 @@ Dry-run mode performs the same selection and conflict checks without writing run
 ```bash
 ./skillhub deploy codex --dry-run
 ./skillhub deploy claude platform-team/java-review --dry-run
+./skillhub deploy gemini platform-team/java-review --dry-run
 ```
 
 Without `--force`, deploy preflights all selected skills before copying files. If any selected target already exists, the command fails before partial writes. Use `--force` to replace existing runtime copies.

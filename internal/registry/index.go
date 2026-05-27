@@ -20,6 +20,7 @@ const (
 	SourceTypeGit      = "git"
 	TargetCodex        = "codex"
 	TargetClaude       = "claude"
+	TargetGemini       = "gemini"
 	TrustOfficial      = "official"
 	TrustCurated       = "curated"
 	TrustCommunity     = "community"
@@ -412,7 +413,7 @@ func validateCatalogSchema(index Index) error {
 
 func validTarget(target string) bool {
 	switch target {
-	case TargetCodex, TargetClaude:
+	case TargetCodex, TargetClaude, TargetGemini:
 		return true
 	default:
 		return false

@@ -17,6 +17,10 @@ func ClaudeDir() (string, error) {
 	return RuntimeDir("claude")
 }
 
+func GeminiDir() (string, error) {
+	return RuntimeDir("gemini")
+}
+
 type Options struct {
 	Identity string
 	DryRun   bool
@@ -56,6 +60,7 @@ const (
 var supportedRuntimes = []Runtime{
 	{Name: "codex", EnvVar: "SKILLHUB_CODEX_DIR", DefaultSubdir: filepath.Join(".codex", "skills")},
 	{Name: "claude", EnvVar: "SKILLHUB_CLAUDE_DIR", DefaultSubdir: filepath.Join(".claude", "skills")},
+	{Name: "gemini", EnvVar: "SKILLHUB_GEMINI_DIR", DefaultSubdir: filepath.Join(".gemini", "skills")},
 }
 
 func SupportedRuntimes() []Runtime {
@@ -78,6 +83,10 @@ func DeployCodex(options Options) ([]Result, error) {
 
 func DeployClaude(options Options) ([]Result, error) {
 	return deployRuntime("claude", options)
+}
+
+func DeployGemini(options Options) ([]Result, error) {
+	return deployRuntime("gemini", options)
 }
 
 func Statuses(runtime string) ([]Status, error) {

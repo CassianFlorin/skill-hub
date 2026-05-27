@@ -115,7 +115,7 @@ func runUninstall(args []string, stdout io.Writer) error {
 		return err
 	}
 	if removeDeployed {
-		for _, runtime := range []string{"codex", "claude"} {
+		for _, runtime := range deploy.RuntimeNames() {
 			target, err := deploy.RuntimeTarget(runtime, locked.DisplayIdentity())
 			if err != nil {
 				return err
@@ -784,7 +784,7 @@ func runUpdate(stdout io.Writer) error {
 
 func runDeploy(args []string, stdout io.Writer) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: skillhub deploy <codex|claude> [identity] [--dry-run] [--force]")
+		return fmt.Errorf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
 	}
 	runtime := args[0]
 	if runtime == "status" {
@@ -799,7 +799,7 @@ func runDeploy(args []string, stdout io.Writer) error {
 			options.Force = true
 		default:
 			if options.Identity != "" {
-				return fmt.Errorf("usage: skillhub deploy codex [identity] [--dry-run] [--force]")
+				return fmt.Errorf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
 			}
 			options.Identity = arg
 		}
@@ -811,8 +811,10 @@ func runDeploy(args []string, stdout io.Writer) error {
 		deployed, err = deploy.DeployCodex(options)
 	case "claude":
 		deployed, err = deploy.DeployClaude(options)
+	case "gemini":
+		deployed, err = deploy.DeployGemini(options)
 	default:
-		return fmt.Errorf("usage: skillhub deploy <codex|claude> [identity] [--dry-run] [--force]")
+		return fmt.Errorf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
 	}
 	if err != nil {
 		return err
@@ -844,7 +846,7 @@ func deployResultLine(result deploy.Result, runtime string) string {
 
 func runDeployStatus(args []string, stdout io.Writer) error {
 	if len(args) > 1 {
-		return fmt.Errorf("usage: skillhub deploy status [codex|claude]")
+		return fmt.Errorf("usage: skillhub deploy status [%s]", strings.Join(deploy.RuntimeNames(), "|"))
 	}
 	runtime := ""
 	if len(args) == 1 {
