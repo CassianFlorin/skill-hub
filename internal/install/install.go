@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cassian/skill-hub/internal/config"
+	"github.com/cassian/skill-hub/internal/registry"
 	"github.com/cassian/skill-hub/internal/skill"
 )
 
@@ -26,6 +27,7 @@ type LockedSkill struct {
 	Description    string   `json:"description,omitempty"`
 	SourceType     string   `json:"source_type"`
 	SourceRegistry string   `json:"source_registry,omitempty"`
+	SourceURL      string   `json:"source_url,omitempty"`
 	SourcePath     string   `json:"source_path"`
 	InstalledPath  string   `json:"installed_path"`
 	Targets        []string `json:"targets,omitempty"`
@@ -80,7 +82,7 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	if err != nil {
 		return LockedSkill{}, err
 	}
-	sourcePath, sourceType, sourceRegistry, err := resolveSource(workDir, cfg, spec)
+	sourcePath, sourceType, sourceRegistry, sourceURL, err := resolveSource(workDir, cfg, spec)
 	if err != nil {
 		return LockedSkill{}, err
 	}
@@ -98,6 +100,7 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 		Description:    meta.Description,
 		SourceType:     sourceType,
 		SourceRegistry: sourceRegistry,
+		SourceURL:      sourceURL,
 		SourcePath:     sourcePath,
 		InstalledPath:  installedPath,
 		Targets:        meta.Targets,
@@ -121,6 +124,14 @@ func UpdateAll() ([][3]string, error) {
 	}
 	var changes [][3]string
 	for i, locked := range lock.Skills {
+		if locked.SourceType == "git" {
+			cachePath, err := registry.EnsureGitCache(locked.SourceRegistry, locked.SourceURL)
+			if err != nil {
+				return nil, fmt.Errorf("update %s: %w", locked.Name, err)
+			}
+			locked.SourcePath = filepath.Join(cachePath, locked.Name)
+			lock.Skills[i].SourcePath = locked.SourcePath
+		}
 		meta, err := skill.LoadMetadata(locked.SourcePath)
 		if err != nil {
 			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
@@ -153,29 +164,33 @@ func (l *LockFile) upsert(skill LockedSkill) {
 	l.Skills = append(l.Skills, skill)
 }
 
-func resolveSource(workDir string, cfg config.Config, spec string) (path string, sourceType string, registry string, err error) {
+func resolveSource(workDir string, cfg config.Config, spec string) (path string, sourceType string, registryName string, sourceURL string, err error) {
 	if looksLikePath(spec) {
 		abs, err := absoluteFrom(workDir, spec)
 		if err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
-		return abs, "local", "", nil
+		return abs, "local", "", "", nil
 	}
 	registryName, skillName, ok := strings.Cut(spec, "/")
 	if !ok || registryName == "" || skillName == "" {
-		return "", "", "", fmt.Errorf("install spec must be a path or registry/skill")
+		return "", "", "", "", fmt.Errorf("install spec must be a path or registry/skill")
 	}
 	reg, ok := cfg.Registries[registryName]
 	if !ok {
-		return "", "", "", fmt.Errorf("unknown registry %q", registryName)
+		return "", "", "", "", fmt.Errorf("unknown registry %q", registryName)
 	}
 	switch reg.Type {
 	case "local":
-		return filepath.Join(reg.Path, skillName), "registry", registryName, nil
+		return filepath.Join(reg.Path, skillName), "registry", registryName, "", nil
 	case "git":
-		return "", "", "", fmt.Errorf("git registry install requires a local checkout in this MVP")
+		cachePath, err := registry.EnsureGitCache(registryName, reg.URL)
+		if err != nil {
+			return "", "", "", "", err
+		}
+		return filepath.Join(cachePath, skillName), "git", registryName, reg.URL, nil
 	default:
-		return "", "", "", fmt.Errorf("unsupported registry type %q", reg.Type)
+		return "", "", "", "", fmt.Errorf("unsupported registry type %q", reg.Type)
 	}
 }
 

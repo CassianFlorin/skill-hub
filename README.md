@@ -17,12 +17,13 @@ skillhub update
 skillhub deploy codex
 ```
 
-The MVP supports local registry installation and records git registry metadata. Direct clone/install from remote git registries is intentionally not implemented yet.
+The MVP supports local registry installation and git registry installation. Git registries are cloned into a local cache on first use and refreshed with `git pull --ff-only` during install/update.
 
 ## State files
 
 - Project config: `skillhub.yaml`
 - Runtime home: `$SKILLHUB_HOME`, defaulting to `~/.skillhub`
+- Git registry cache: `$SKILLHUB_HOME/cache/registries/<registry-name>`
 - Installed skills: `$SKILLHUB_HOME/installed/<skill-name>`
 - Lockfile: `$SKILLHUB_HOME/skillhub.lock`
 - Codex deploy target: `$SKILLHUB_CODEX_DIR`, defaulting to `~/.codex/skills`
@@ -71,3 +72,13 @@ export SKILLHUB_CODEX_DIR="$PWD/.skillhub-e2e/codex"
 ./skillhub list
 ./skillhub deploy codex
 ```
+
+Git registry example:
+
+```bash
+./skillhub registry add git team git@github.com:your-org/skills.git
+./skillhub install team/java-review
+./skillhub update
+```
+
+For git registries, `skillhub update` refreshes the cached repository and updates installed skills when their `skill.yaml` version changes.
