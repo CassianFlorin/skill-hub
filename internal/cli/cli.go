@@ -35,6 +35,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		}
 		_, _ = fmt.Fprintf(stdout, "installed %s@%s\n", locked.DisplayIdentity(), locked.Version)
 		return nil
+	case "rollback":
+		return runRollback(args[1:], stdout)
 	case "list":
 		return runList(stdout)
 	case "update":
@@ -44,6 +46,18 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 	default:
 		return usage(stderr)
 	}
+}
+
+func runRollback(args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillhub rollback <identity>")
+	}
+	locked, err := install.Rollback(args[0])
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "rolled back %s to %s\n", locked.DisplayIdentity(), locked.Version)
+	return nil
 }
 
 func runInit(stdout io.Writer, workDir string) error {
@@ -260,6 +274,6 @@ func runDeploy(args []string, stdout io.Writer) error {
 }
 
 func usage(stderr io.Writer) error {
-	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|search|info|install|list|update|deploy>")
+	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|search|info|install|rollback|list|update|deploy>")
 	return fmt.Errorf("invalid command")
 }

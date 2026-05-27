@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -100,6 +101,15 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	if sourceRef != "" && sourceType != "git" && meta.Version != sourceRef {
 		return LockedSkill{}, fmt.Errorf("version %s not available for %s", sourceRef, identity)
 	}
+	lock, err := LoadLock()
+	if err != nil {
+		return LockedSkill{}, err
+	}
+	if existing, ok := lock.find(identity); ok {
+		if err := saveHistory(existing); err != nil {
+			return LockedSkill{}, err
+		}
+	}
 	installedPath := filepath.Join(cfg.InstallDir, skill.SafeIdentity(identity))
 	if err := copyDir(sourcePath, installedPath); err != nil {
 		return LockedSkill{}, err
@@ -130,15 +140,46 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 		Targets:        meta.Targets,
 		UpdatedAt:      time.Now().UTC().Format(time.RFC3339),
 	}
-	lock, err := LoadLock()
-	if err != nil {
-		return LockedSkill{}, err
-	}
 	lock.upsert(locked)
 	if err := SaveLock(lock); err != nil {
 		return LockedSkill{}, err
 	}
 	return locked, nil
+}
+
+func Rollback(identity string) (LockedSkill, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return LockedSkill{}, err
+	}
+	current, ok := lock.find(identity)
+	if !ok {
+		return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
+	}
+	snapshot, err := latestHistory(current.DisplayIdentity())
+	if err != nil {
+		return LockedSkill{}, err
+	}
+	if err := copyDir(snapshot.InstalledPath, current.InstalledPath); err != nil {
+		return LockedSkill{}, err
+	}
+	restored := snapshot.Locked
+	restored.InstalledPath = current.InstalledPath
+	restored.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	lock.upsert(restored)
+	if err := SaveLock(lock); err != nil {
+		return LockedSkill{}, err
+	}
+	return restored, nil
+}
+
+func (l *LockFile) find(identity string) (LockedSkill, bool) {
+	for _, existing := range l.Skills {
+		if existing.DisplayIdentity() == identity || existing.Name == identity {
+			return existing, true
+		}
+	}
+	return LockedSkill{}, false
 }
 
 func UpdateAll() ([][3]string, error) {
@@ -190,6 +231,87 @@ func UpdateAll() ([][3]string, error) {
 		return nil, err
 	}
 	return changes, nil
+}
+
+type historyManifest struct {
+	Locked LockedSkill `json:"locked"`
+}
+
+type historySnapshot struct {
+	Locked        LockedSkill
+	InstalledPath string
+}
+
+func saveHistory(locked LockedSkill) error {
+	if locked.InstalledPath == "" {
+		return nil
+	}
+	if _, err := os.Stat(locked.InstalledPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	root, err := historyRoot(locked.DisplayIdentity())
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(root, time.Now().UTC().Format("20060102T150405.000000000Z"))
+	filesDir := filepath.Join(dir, "files")
+	if err := copyDir(locked.InstalledPath, filesDir); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(historyManifest{Locked: locked}, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0o644)
+}
+
+func latestHistory(identity string) (historySnapshot, error) {
+	root, err := historyRoot(identity)
+	if err != nil {
+		return historySnapshot{}, err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return historySnapshot{}, fmt.Errorf("no rollback history for %s", identity)
+		}
+		return historySnapshot{}, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+	if len(names) == 0 {
+		return historySnapshot{}, fmt.Errorf("no rollback history for %s", identity)
+	}
+	sort.Strings(names)
+	dir := filepath.Join(root, names[len(names)-1])
+	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		return historySnapshot{}, err
+	}
+	var manifest historyManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return historySnapshot{}, err
+	}
+	return historySnapshot{
+		Locked:        manifest.Locked,
+		InstalledPath: filepath.Join(dir, "files"),
+	}, nil
+}
+
+func historyRoot(identity string) (string, error) {
+	home, err := config.DefaultHome()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "history", skill.SafeIdentity(identity)), nil
 }
 
 func (l *LockFile) upsert(skill LockedSkill) {

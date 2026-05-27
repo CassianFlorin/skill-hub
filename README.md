@@ -17,6 +17,7 @@ skillhub info company/platform-team/java-review
 skillhub install company/java-review
 skillhub install company/java-review@1.2.0
 skillhub install ./examples/local-registry/java-review
+skillhub rollback platform-team/java-review
 skillhub list
 skillhub update
 skillhub deploy codex
@@ -112,6 +113,14 @@ Pinned install examples:
 ```
 
 For local registries, the pinned value must match the Skill metadata version. For git registries, the pinned value is treated as a git ref and is recorded in `skillhub.lock` together with the resolved commit.
+
+Rollback example:
+
+```bash
+./skillhub rollback platform-team/java-review
+```
+
+skill-hub saves a history snapshot before replacing an installed Skill. Rollback restores the latest previous installed copy and updates `skillhub.lock`.
 
 Registry index example:
 

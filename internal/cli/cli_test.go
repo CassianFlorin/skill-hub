@@ -249,6 +249,42 @@ func TestInstallFromGitRegistryPinsTagAndRecordsCommit(t *testing.T) {
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_commit": "`)
 }
 
+func TestRollbackRestoresPreviousInstalledVersion(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.2.0\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review")
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.Replace(readFile(t, filepath.Join(skillDir, "skill.yaml")), "version: 1.2.0", "version: 1.3.0", 1))
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.3.0\n")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.3.0")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "rollback", "platform/java-review")
+	assertContains(t, stdout.String(), "rolled back platform/java-review to 1.2.0")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.2.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.2.0"`)
+}
+
 func TestRegistryAddLocalResolvesRelativePathsFromWorkDir(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")
