@@ -4,18 +4,23 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 )
 
+const Unversioned = "unversioned"
+
 type Metadata struct {
 	Name        string
+	Namespace   string
 	Version     string
 	Description string
 	Author      string
 	Entry       string
 	Targets     []string
 	Tags        []string
+	Generated   bool
 }
 
 func LoadMetadata(dir string) (Metadata, error) {
@@ -57,6 +62,8 @@ func LoadMetadata(dir string) (Metadata, error) {
 		switch key {
 		case "name":
 			meta.Name = value
+		case "namespace":
+			meta.Namespace = value
 		case "version":
 			meta.Version = value
 		case "description":
@@ -65,6 +72,8 @@ func LoadMetadata(dir string) (Metadata, error) {
 			meta.Author = value
 		case "entry":
 			meta.Entry = value
+		case "generated":
+			meta.Generated = value == "true"
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -74,10 +83,68 @@ func LoadMetadata(dir string) (Metadata, error) {
 		return Metadata{}, fmt.Errorf("skill.yaml missing name")
 	}
 	if meta.Version == "" {
-		return Metadata{}, fmt.Errorf("skill.yaml missing version")
+		meta.Version = Unversioned
 	}
 	if _, err := os.Stat(filepath.Join(dir, meta.Entry)); err != nil {
 		return Metadata{}, fmt.Errorf("entry %s: %w", meta.Entry, err)
 	}
 	return meta, nil
+}
+
+func LoadCompatibleMetadata(dir string, fallbackNamespace string) (Metadata, error) {
+	meta, err := LoadMetadata(dir)
+	if err == nil {
+		meta.Namespace = ResolveNamespace(meta, fallbackNamespace)
+		return meta, nil
+	}
+	if !os.IsNotExist(err) {
+		return Metadata{}, err
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "SKILL.md")); statErr != nil {
+		return Metadata{}, err
+	}
+	meta = Metadata{
+		Name:      filepath.Base(dir),
+		Namespace: fallbackNamespace,
+		Version:   Unversioned,
+		Entry:     "SKILL.md",
+		Generated: true,
+	}
+	meta.Namespace = ResolveNamespace(meta, fallbackNamespace)
+	return meta, nil
+}
+
+func ResolveNamespace(meta Metadata, fallback string) string {
+	switch {
+	case meta.Namespace != "":
+		return meta.Namespace
+	case meta.Author != "":
+		return meta.Author
+	case fallback != "":
+		return fallback
+	}
+	if current, err := user.Current(); err == nil && current.Username != "" {
+		parts := strings.Split(current.Username, string(os.PathSeparator))
+		return parts[len(parts)-1]
+	}
+	return "unknown"
+}
+
+func Identity(namespace string, name string) string {
+	return namespace + "/" + name
+}
+
+func SafeIdentity(identity string) string {
+	replacer := strings.NewReplacer("/", "__", "\\", "__", ":", "_", " ", "-")
+	return replacer.Replace(identity)
+}
+
+func WriteGeneratedMetadata(dir string, meta Metadata) error {
+	var builder strings.Builder
+	builder.WriteString("name: " + meta.Name + "\n")
+	builder.WriteString("namespace: " + meta.Namespace + "\n")
+	builder.WriteString("entry: " + meta.Entry + "\n")
+	builder.WriteString("version: " + meta.Version + "\n")
+	builder.WriteString("generated: true\n")
+	return os.WriteFile(filepath.Join(dir, "skill.yaml"), []byte(builder.String()), 0o644)
 }

@@ -1,12 +1,15 @@
 package install
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,15 +25,21 @@ type LockFile struct {
 }
 
 type LockedSkill struct {
+	Identity       string   `json:"identity"`
 	Name           string   `json:"name"`
+	Namespace      string   `json:"namespace"`
 	Version        string   `json:"version"`
 	Description    string   `json:"description,omitempty"`
 	SourceType     string   `json:"source_type"`
 	SourceRegistry string   `json:"source_registry,omitempty"`
 	SourceURL      string   `json:"source_url,omitempty"`
+	SourceRef      string   `json:"source_ref,omitempty"`
+	SourceCommit   string   `json:"source_commit,omitempty"`
 	SourcePath     string   `json:"source_path"`
+	Checksum       string   `json:"checksum,omitempty"`
 	InstalledPath  string   `json:"installed_path"`
 	Targets        []string `json:"targets,omitempty"`
+	DeployedTo     []string `json:"deployed_runtimes,omitempty"`
 	UpdatedAt      string   `json:"updated_at"`
 }
 
@@ -86,22 +95,35 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	if err != nil {
 		return LockedSkill{}, err
 	}
-	meta, err := skill.LoadMetadata(sourcePath)
+	meta, err := skill.LoadCompatibleMetadata(sourcePath, sourceRegistry)
 	if err != nil {
 		return LockedSkill{}, err
 	}
-	installedPath := filepath.Join(cfg.InstallDir, meta.Name)
+	identity := skill.Identity(meta.Namespace, meta.Name)
+	installedPath := filepath.Join(cfg.InstallDir, skill.SafeIdentity(identity))
 	if err := copyDir(sourcePath, installedPath); err != nil {
 		return LockedSkill{}, err
 	}
+	if meta.Generated {
+		if err := skill.WriteGeneratedMetadata(installedPath, meta); err != nil {
+			return LockedSkill{}, err
+		}
+	}
+	checksum, err := checksumDir(installedPath)
+	if err != nil {
+		return LockedSkill{}, err
+	}
 	locked := LockedSkill{
+		Identity:       identity,
 		Name:           meta.Name,
+		Namespace:      meta.Namespace,
 		Version:        meta.Version,
 		Description:    meta.Description,
 		SourceType:     sourceType,
 		SourceRegistry: sourceRegistry,
 		SourceURL:      sourceURL,
 		SourcePath:     sourcePath,
+		Checksum:       checksum,
 		InstalledPath:  installedPath,
 		Targets:        meta.Targets,
 		UpdatedAt:      time.Now().UTC().Format(time.RFC3339),
@@ -132,7 +154,7 @@ func UpdateAll() ([][3]string, error) {
 			locked.SourcePath = filepath.Join(cachePath, locked.Name)
 			lock.Skills[i].SourcePath = locked.SourcePath
 		}
-		meta, err := skill.LoadMetadata(locked.SourcePath)
+		meta, err := skill.LoadCompatibleMetadata(locked.SourcePath, locked.SourceRegistry)
 		if err != nil {
 			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
 		}
@@ -142,10 +164,24 @@ func UpdateAll() ([][3]string, error) {
 		if err := copyDir(locked.SourcePath, locked.InstalledPath); err != nil {
 			return nil, err
 		}
-		changes = append(changes, [3]string{locked.Name, locked.Version, meta.Version})
+		if meta.Generated {
+			if err := skill.WriteGeneratedMetadata(locked.InstalledPath, meta); err != nil {
+				return nil, err
+			}
+		}
+		checksum, err := checksumDir(locked.InstalledPath)
+		if err != nil {
+			return nil, err
+		}
+		identity := skill.Identity(meta.Namespace, meta.Name)
+		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})
+		lock.Skills[i].Identity = identity
+		lock.Skills[i].Name = meta.Name
+		lock.Skills[i].Namespace = meta.Namespace
 		lock.Skills[i].Version = meta.Version
 		lock.Skills[i].Description = meta.Description
 		lock.Skills[i].Targets = meta.Targets
+		lock.Skills[i].Checksum = checksum
 		lock.Skills[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	if err := SaveLock(lock); err != nil {
@@ -156,12 +192,26 @@ func UpdateAll() ([][3]string, error) {
 
 func (l *LockFile) upsert(skill LockedSkill) {
 	for i, existing := range l.Skills {
-		if existing.Name == skill.Name {
+		if existing.displayIdentity() == skill.displayIdentity() {
 			l.Skills[i] = skill
 			return
 		}
 	}
 	l.Skills = append(l.Skills, skill)
+}
+
+func (s LockedSkill) displayIdentity() string {
+	return s.DisplayIdentity()
+}
+
+func (s LockedSkill) DisplayIdentity() string {
+	if s.Identity != "" {
+		return s.Identity
+	}
+	if s.Namespace != "" {
+		return skill.Identity(s.Namespace, s.Name)
+	}
+	return s.Name
 }
 
 func resolveSource(workDir string, cfg config.Config, spec string) (path string, sourceType string, registryName string, sourceURL string, err error) {
@@ -252,4 +302,37 @@ func copyFile(src string, dst string, mode os.FileMode) error {
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
+}
+
+func checksumDir(root string) (string, error) {
+	var files []string
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, rel)
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	sort.Strings(files)
+	hash := sha256.New()
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			return "", err
+		}
+		_, _ = hash.Write([]byte(rel))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(data)
+		_, _ = hash.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }

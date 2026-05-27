@@ -46,8 +46,8 @@ tags:
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "install", "company/java-review")
-	assertContains(t, stdout.String(), "installed java-review@1.2.0")
-	assertFileContains(t, filepath.Join(home, "installed", "java-review", "SKILL.md"), "Review Java changes")
+	assertContains(t, stdout.String(), "installed platform-team/java-review@1.2.0")
+	assertFileContains(t, filepath.Join(home, "installed", "platform-team__java-review", "SKILL.md"), "Review Java changes")
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.2.0"`)
 
 	stdout.Reset()
@@ -58,7 +58,7 @@ tags:
 	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.Replace(readFile(t, filepath.Join(skillDir, "skill.yaml")), "version: 1.2.0", "version: 1.3.0", 1))
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "update")
-	assertContains(t, stdout.String(), "updated java-review 1.2.0 -> 1.3.0")
+	assertContains(t, stdout.String(), "updated platform-team/java-review 1.2.0 -> 1.3.0")
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.3.0"`)
 
 	stdout.Reset()
@@ -77,6 +77,7 @@ func TestInstallFromExplicitLocalPath(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
 name: my-skill
+namespace: local
 version: 0.1.0
 description: Local test skill
 entry: SKILL.md
@@ -90,8 +91,40 @@ targets:
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "install", localSkill)
 
-	assertContains(t, stdout.String(), "installed my-skill@0.1.0")
-	assertFileContains(t, filepath.Join(home, "installed", "my-skill", "skill.yaml"), "Local test skill")
+	assertContains(t, stdout.String(), "installed local/my-skill@0.1.0")
+	assertFileContains(t, filepath.Join(home, "installed", "local__my-skill", "skill.yaml"), "Local test skill")
+}
+
+func TestInstallSkillOnlyDirectoryGeneratesMetadataAndNamespaceIdentity(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "obsidian-cli")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Obsidian CLI\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "cassian", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "cassian/obsidian-cli")
+
+	assertContains(t, stdout.String(), "installed cassian/obsidian-cli@unversioned")
+	installedDir := filepath.Join(home, "installed", "cassian__obsidian-cli")
+	assertFileContains(t, filepath.Join(installedDir, "SKILL.md"), "# Obsidian CLI")
+	assertFileContains(t, filepath.Join(installedDir, "skill.yaml"), "namespace: cassian")
+	assertFileContains(t, filepath.Join(installedDir, "skill.yaml"), "generated: true")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"identity": "cassian/obsidian-cli"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "unversioned"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"checksum": "`)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "list")
+	assertContains(t, stdout.String(), "cassian/obsidian-cli")
+	assertContains(t, stdout.String(), "unversioned")
 }
 
 func TestRegistryAddGitRecordsMetadataWithoutCloning(t *testing.T) {
@@ -132,9 +165,9 @@ func TestInstallAndUpdateFromGitRegistry(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "install", "company/java-review")
 
-	assertContains(t, stdout.String(), "installed java-review@1.2.0")
+	assertContains(t, stdout.String(), "installed company/java-review@1.2.0")
 	assertFileContains(t, filepath.Join(home, "cache", "registries", "company", "java-review", "SKILL.md"), "Git Java review skill")
-	assertFileContains(t, filepath.Join(home, "installed", "java-review", "SKILL.md"), "Git Java review skill")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "Git Java review skill")
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_type": "git"`)
 
 	writeGitSkill(t, remoteWorktree, "java-review", "1.3.0", "Git Java review skill v1.3.0")
@@ -144,8 +177,8 @@ func TestInstallAndUpdateFromGitRegistry(t *testing.T) {
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "update")
-	assertContains(t, stdout.String(), "updated java-review 1.2.0 -> 1.3.0")
-	assertFileContains(t, filepath.Join(home, "installed", "java-review", "SKILL.md"), "v1.3.0")
+	assertContains(t, stdout.String(), "updated company/java-review 1.2.0 -> 1.3.0")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "v1.3.0")
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.3.0"`)
 }
 

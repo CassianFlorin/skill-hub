@@ -27,7 +27,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(stdout, "installed %s@%s\n", locked.Name, locked.Version)
+		_, _ = fmt.Fprintf(stdout, "installed %s@%s\n", locked.DisplayIdentity(), locked.Version)
 		return nil
 	case "list":
 		return runList(stdout)
@@ -96,7 +96,7 @@ func runList(stdout io.Writer) error {
 		return nil
 	}
 	for _, locked := range lock.Skills {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", locked.Name, locked.Version, locked.Description)
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", locked.DisplayIdentity(), locked.Version, locked.Description)
 	}
 	return nil
 }
