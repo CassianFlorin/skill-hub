@@ -173,6 +173,27 @@ func Rollback(identity string) (LockedSkill, error) {
 	return restored, nil
 }
 
+func Uninstall(identity string) (LockedSkill, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return LockedSkill{}, err
+	}
+	locked, ok := lock.find(identity)
+	if !ok {
+		return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
+	}
+	if locked.InstalledPath != "" {
+		if err := os.RemoveAll(locked.InstalledPath); err != nil {
+			return LockedSkill{}, err
+		}
+	}
+	lock.remove(locked.DisplayIdentity())
+	if err := SaveLock(lock); err != nil {
+		return LockedSkill{}, err
+	}
+	return locked, nil
+}
+
 func (l *LockFile) find(identity string) (LockedSkill, bool) {
 	for _, existing := range l.Skills {
 		if existing.DisplayIdentity() == identity || existing.Name == identity {
@@ -180,6 +201,16 @@ func (l *LockFile) find(identity string) (LockedSkill, bool) {
 		}
 	}
 	return LockedSkill{}, false
+}
+
+func (l *LockFile) remove(identity string) {
+	var kept []LockedSkill
+	for _, existing := range l.Skills {
+		if existing.DisplayIdentity() != identity {
+			kept = append(kept, existing)
+		}
+	}
+	l.Skills = kept
 }
 
 func UpdateAll() ([][3]string, error) {

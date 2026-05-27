@@ -121,6 +121,14 @@ func runtimeDir(runtime string) (string, error) {
 	}
 }
 
+func RuntimeTarget(runtime string, identity string) (string, error) {
+	root, err := runtimeDir(runtime)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, skill.SafeIdentity(identity)), nil
+}
+
 func deployRuntime(runtime string, targetRoot string, options Options) ([]Result, error) {
 	lock, err := install.LoadLock()
 	if err != nil {

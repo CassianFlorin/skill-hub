@@ -18,6 +18,7 @@ skillhub install company/java-review
 skillhub install company/java-review@1.2.0
 skillhub install ./examples/local-registry/java-review
 skillhub rollback platform-team/java-review
+skillhub uninstall platform-team/java-review
 skillhub list
 skillhub update
 skillhub deploy codex
@@ -122,6 +123,15 @@ Rollback example:
 ```
 
 skill-hub saves a history snapshot before replacing an installed Skill. Rollback restores the latest previous installed copy and updates `skillhub.lock`.
+
+Uninstall examples:
+
+```bash
+./skillhub uninstall platform-team/java-review
+./skillhub uninstall platform-team/java-review --deployed
+```
+
+By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex and Claude runtime copies.
 
 Registry index example:
 

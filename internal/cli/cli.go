@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -37,6 +38,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return nil
 	case "rollback":
 		return runRollback(args[1:], stdout)
+	case "uninstall":
+		return runUninstall(args[1:], stdout)
 	case "list":
 		return runList(stdout)
 	case "update":
@@ -46,6 +49,36 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 	default:
 		return usage(stderr)
 	}
+}
+
+func runUninstall(args []string, stdout io.Writer) error {
+	if len(args) < 1 || len(args) > 2 {
+		return fmt.Errorf("usage: skillhub uninstall <identity> [--deployed]")
+	}
+	removeDeployed := false
+	if len(args) == 2 {
+		if args[1] != "--deployed" {
+			return fmt.Errorf("usage: skillhub uninstall <identity> [--deployed]")
+		}
+		removeDeployed = true
+	}
+	locked, err := install.Uninstall(args[0])
+	if err != nil {
+		return err
+	}
+	if removeDeployed {
+		for _, runtime := range []string{"codex", "claude"} {
+			target, err := deploy.RuntimeTarget(runtime, locked.DisplayIdentity())
+			if err != nil {
+				return err
+			}
+			if err := os.RemoveAll(target); err != nil {
+				return err
+			}
+		}
+	}
+	_, _ = fmt.Fprintf(stdout, "uninstalled %s\n", locked.DisplayIdentity())
+	return nil
 }
 
 func runRollback(args []string, stdout io.Writer) error {
@@ -295,6 +328,6 @@ func runDeployStatus(args []string, stdout io.Writer) error {
 }
 
 func usage(stderr io.Writer) error {
-	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|search|info|install|rollback|list|update|deploy>")
+	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|search|info|install|rollback|uninstall|list|update|deploy>")
 	return fmt.Errorf("invalid command")
 }
