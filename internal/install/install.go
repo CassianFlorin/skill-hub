@@ -1,15 +1,12 @@
 package install
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -109,7 +106,7 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 			return LockedSkill{}, err
 		}
 	}
-	checksum, err := checksumDir(installedPath)
+	checksum, err := skill.ChecksumDir(installedPath)
 	if err != nil {
 		return LockedSkill{}, err
 	}
@@ -169,7 +166,7 @@ func UpdateAll() ([][3]string, error) {
 				return nil, err
 			}
 		}
-		checksum, err := checksumDir(locked.InstalledPath)
+		checksum, err := skill.ChecksumDir(locked.InstalledPath)
 		if err != nil {
 			return nil, err
 		}
@@ -232,11 +229,21 @@ func resolveSource(workDir string, cfg config.Config, spec string) (path string,
 	}
 	switch reg.Type {
 	case "local":
+		if indexedPath, ok, err := registry.ResolveIndexedPath(reg.Path, skillName); err != nil {
+			return "", "", "", "", err
+		} else if ok {
+			return indexedPath, "registry", registryName, "", nil
+		}
 		return filepath.Join(reg.Path, skillName), "registry", registryName, "", nil
 	case "git":
 		cachePath, err := registry.EnsureGitCache(registryName, reg.URL)
 		if err != nil {
 			return "", "", "", "", err
+		}
+		if indexedPath, ok, err := registry.ResolveIndexedPath(cachePath, skillName); err != nil {
+			return "", "", "", "", err
+		} else if ok {
+			return indexedPath, "git", registryName, reg.URL, nil
 		}
 		return filepath.Join(cachePath, skillName), "git", registryName, reg.URL, nil
 	default:
@@ -302,37 +309,4 @@ func copyFile(src string, dst string, mode os.FileMode) error {
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
-}
-
-func checksumDir(root string) (string, error) {
-	var files []string
-	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		files = append(files, rel)
-		return nil
-	}); err != nil {
-		return "", err
-	}
-	sort.Strings(files)
-	hash := sha256.New()
-	for _, rel := range files {
-		data, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil {
-			return "", err
-		}
-		_, _ = hash.Write([]byte(rel))
-		_, _ = hash.Write([]byte{0})
-		_, _ = hash.Write(data)
-		_, _ = hash.Write([]byte{0})
-	}
-	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }

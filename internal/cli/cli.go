@@ -8,6 +8,7 @@ import (
 	"github.com/cassian/skill-hub/internal/config"
 	"github.com/cassian/skill-hub/internal/deploy"
 	"github.com/cassian/skill-hub/internal/install"
+	"github.com/cassian/skill-hub/internal/registry"
 )
 
 func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) error {
@@ -53,13 +54,24 @@ func runInit(stdout io.Writer, workDir string) error {
 }
 
 func runRegistry(args []string, stdout io.Writer, workDir string) error {
-	if len(args) < 1 || args[0] != "add" {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: skillhub registry <add|index>")
+	}
+	switch args[0] {
+	case "add":
+		return runRegistryAdd(args[1:], stdout, workDir)
+	case "index":
+		return runRegistryIndex(args[1:], stdout, workDir)
+	default:
+		return fmt.Errorf("usage: skillhub registry <add|index>")
+	}
+}
+
+func runRegistryAdd(args []string, stdout io.Writer, workDir string) error {
+	if len(args) != 3 {
 		return fmt.Errorf("usage: skillhub registry add <local|git> <name> <path-or-url>")
 	}
-	if len(args) != 4 {
-		return fmt.Errorf("usage: skillhub registry add <local|git> <name> <path-or-url>")
-	}
-	registryType, name, location := args[1], args[2], args[3]
+	registryType, name, location := args[0], args[1], args[2]
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
@@ -83,6 +95,27 @@ func runRegistry(args []string, stdout io.Writer, workDir string) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "registered %s\n", name)
+	return nil
+}
+
+func runRegistryIndex(args []string, stdout io.Writer, workDir string) error {
+	if len(args) != 2 || args[0] != "generate" {
+		return fmt.Errorf("usage: skillhub registry index generate <registry>")
+	}
+	name := args[1]
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	reg, ok := cfg.Registries[name]
+	if !ok {
+		return fmt.Errorf("unknown registry %q", name)
+	}
+	index, _, err := registry.GenerateIndex(name, reg)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "indexed %s with %d skills\n", name, len(index.Skills))
 	return nil
 }
 

@@ -196,6 +196,71 @@ func TestRegistryAddLocalResolvesRelativePathsFromWorkDir(t *testing.T) {
 	assertFileContains(t, filepath.Join(projectDir, "skillhub.yaml"), registryDir)
 }
 
+func TestRegistryIndexGenerateWritesCatalog(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+description: Java review skill
+entry: SKILL.md
+targets:
+  - codex
+  - claude
+tags:
+  - java
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "generate", "company")
+
+	assertContains(t, stdout.String(), "indexed company with 1 skills")
+	indexPath := filepath.Join(registryDir, "skillhub.index.json")
+	assertFileContains(t, indexPath, `"identity": "platform/java-review"`)
+	assertFileContains(t, indexPath, `"version": "1.2.0"`)
+	assertFileContains(t, indexPath, `"targets": [`)
+	assertFileContains(t, indexPath, `"checksum": "sha256:`)
+}
+
+func TestInstallUsesRegistryIndexForIdentityLookup(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "generate", "company")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/platform/java-review")
+
+	assertContains(t, stdout.String(), "installed platform/java-review@1.2.0")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "# Java Review")
+}
+
 func writeGitSkill(t *testing.T, root string, name string, version string, description string) {
 	t.Helper()
 	skillDir := filepath.Join(root, name)
