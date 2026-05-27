@@ -183,6 +183,72 @@ func TestInstallAndUpdateFromGitRegistry(t *testing.T) {
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.3.0"`)
 }
 
+func TestInstallFromLocalRegistryRequiresPinnedVersionToMatch(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review@1.2.0")
+	assertContains(t, stdout.String(), "installed platform/java-review@1.2.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_ref": "1.2.0"`)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"install", "company/java-review@2.0.0"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected version mismatch")
+	}
+	assertContains(t, err.Error(), "version 2.0.0 not available for platform/java-review")
+}
+
+func TestInstallFromGitRegistryPinsTagAndRecordsCommit(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	remoteWorktree := filepath.Join(workspace, "remote-worktree")
+	remoteRepo := filepath.Join(workspace, "skills.git")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	writeGitSkill(t, remoteWorktree, "java-review", "1.2.0", "Git Java review skill v1.2.0")
+	git(t, remoteWorktree, "init")
+	git(t, remoteWorktree, "config", "user.email", "skillhub@example.com")
+	git(t, remoteWorktree, "config", "user.name", "SkillHub Test")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "initial skill")
+	git(t, remoteWorktree, "tag", "v1.2.0")
+	writeGitSkill(t, remoteWorktree, "java-review", "1.3.0", "Git Java review skill v1.3.0")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "bump skill")
+	git(t, workspace, "clone", "--bare", remoteWorktree, remoteRepo)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "git", "company", remoteRepo)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review@v1.2.0")
+
+	assertContains(t, stdout.String(), "installed company/java-review@1.2.0")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "v1.2.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_ref": "v1.2.0"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_commit": "`)
+}
+
 func TestRegistryAddLocalResolvesRelativePathsFromWorkDir(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")

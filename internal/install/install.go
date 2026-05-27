@@ -88,7 +88,7 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	if err != nil {
 		return LockedSkill{}, err
 	}
-	sourcePath, sourceType, sourceRegistry, sourceURL, err := resolveSource(workDir, cfg, spec)
+	sourcePath, sourceType, sourceRegistry, sourceURL, sourceRef, sourceCommit, err := resolveSource(workDir, cfg, spec)
 	if err != nil {
 		return LockedSkill{}, err
 	}
@@ -97,6 +97,9 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 		return LockedSkill{}, err
 	}
 	identity := skill.Identity(meta.Namespace, meta.Name)
+	if sourceRef != "" && sourceType != "git" && meta.Version != sourceRef {
+		return LockedSkill{}, fmt.Errorf("version %s not available for %s", sourceRef, identity)
+	}
 	installedPath := filepath.Join(cfg.InstallDir, skill.SafeIdentity(identity))
 	if err := copyDir(sourcePath, installedPath); err != nil {
 		return LockedSkill{}, err
@@ -119,6 +122,8 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 		SourceType:     sourceType,
 		SourceRegistry: sourceRegistry,
 		SourceURL:      sourceURL,
+		SourceRef:      sourceRef,
+		SourceCommit:   sourceCommit,
 		SourcePath:     sourcePath,
 		Checksum:       checksum,
 		InstalledPath:  installedPath,
@@ -211,44 +216,56 @@ func (s LockedSkill) DisplayIdentity() string {
 	return s.Name
 }
 
-func resolveSource(workDir string, cfg config.Config, spec string) (path string, sourceType string, registryName string, sourceURL string, err error) {
+func resolveSource(workDir string, cfg config.Config, spec string) (path string, sourceType string, registryName string, sourceURL string, sourceRef string, sourceCommit string, err error) {
+	spec, sourceRef = splitPinnedRef(spec)
 	if looksLikePath(spec) {
 		abs, err := absoluteFrom(workDir, spec)
 		if err != nil {
-			return "", "", "", "", err
+			return "", "", "", "", "", "", err
 		}
-		return abs, "local", "", "", nil
+		return abs, "local", "", "", sourceRef, "", nil
 	}
 	registryName, skillName, ok := strings.Cut(spec, "/")
 	if !ok || registryName == "" || skillName == "" {
-		return "", "", "", "", fmt.Errorf("install spec must be a path or registry/skill")
+		return "", "", "", "", "", "", fmt.Errorf("install spec must be a path or registry/skill")
 	}
 	reg, ok := cfg.Registries[registryName]
 	if !ok {
-		return "", "", "", "", fmt.Errorf("unknown registry %q", registryName)
+		return "", "", "", "", "", "", fmt.Errorf("unknown registry %q", registryName)
 	}
 	switch reg.Type {
 	case "local":
 		if indexedPath, ok, err := registry.ResolveIndexedPath(reg.Path, skillName); err != nil {
-			return "", "", "", "", err
+			return "", "", "", "", "", "", err
 		} else if ok {
-			return indexedPath, "registry", registryName, "", nil
+			return indexedPath, "registry", registryName, "", sourceRef, "", nil
 		}
-		return filepath.Join(reg.Path, skillName), "registry", registryName, "", nil
+		return filepath.Join(reg.Path, skillName), "registry", registryName, "", sourceRef, "", nil
 	case "git":
-		cachePath, err := registry.EnsureGitCache(registryName, reg.URL)
+		cachePath, commit, err := registry.EnsureGitCacheAtRef(registryName, reg.URL, sourceRef)
 		if err != nil {
-			return "", "", "", "", err
+			return "", "", "", "", "", "", err
 		}
 		if indexedPath, ok, err := registry.ResolveIndexedPath(cachePath, skillName); err != nil {
-			return "", "", "", "", err
+			return "", "", "", "", "", "", err
 		} else if ok {
-			return indexedPath, "git", registryName, reg.URL, nil
+			return indexedPath, "git", registryName, reg.URL, sourceRef, commit, nil
 		}
-		return filepath.Join(cachePath, skillName), "git", registryName, reg.URL, nil
+		return filepath.Join(cachePath, skillName), "git", registryName, reg.URL, sourceRef, commit, nil
 	default:
-		return "", "", "", "", fmt.Errorf("unsupported registry type %q", reg.Type)
+		return "", "", "", "", "", "", fmt.Errorf("unsupported registry type %q", reg.Type)
 	}
+}
+
+func splitPinnedRef(spec string) (string, string) {
+	if looksLikePath(spec) {
+		return spec, ""
+	}
+	base, ref, ok := strings.Cut(spec, "@")
+	if !ok {
+		return spec, ""
+	}
+	return base, ref
 }
 
 func looksLikePath(spec string) bool {

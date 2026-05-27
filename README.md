@@ -15,6 +15,7 @@ skillhub registry index validate company
 skillhub search java
 skillhub info company/platform-team/java-review
 skillhub install company/java-review
+skillhub install company/java-review@1.2.0
 skillhub install ./examples/local-registry/java-review
 skillhub list
 skillhub update
@@ -100,6 +101,17 @@ Git registry example:
 ```
 
 For git registries, `skillhub update` refreshes the cached repository and updates installed skills when their `skill.yaml` version changes.
+
+Pinned install examples:
+
+```bash
+./skillhub install company/java-review@1.2.0
+./skillhub install team/java-review@v1.2.0
+./skillhub install team/java-review@main
+./skillhub install team/java-review@<commit-sha>
+```
+
+For local registries, the pinned value must match the Skill metadata version. For git registries, the pinned value is treated as a git ref and is recorded in `skillhub.lock` together with the resolved commit.
 
 Registry index example:
 
