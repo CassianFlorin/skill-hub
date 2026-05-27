@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/cassian/skill-hub/internal/install"
+	"github.com/cassian/skill-hub/internal/skill"
 )
 
 func CodexDir() (string, error) {
@@ -19,7 +20,18 @@ func CodexDir() (string, error) {
 	return filepath.Join(home, ".codex", "skills"), nil
 }
 
-func DeployCodex() ([]string, error) {
+type Options struct {
+	Identity string
+	DryRun   bool
+	Force    bool
+}
+
+type Result struct {
+	Identity string
+	DryRun   bool
+}
+
+func DeployCodex(options Options) ([]Result, error) {
 	lock, err := install.LoadLock()
 	if err != nil {
 		return nil, err
@@ -28,15 +40,46 @@ func DeployCodex() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var deployed []string
-	for _, locked := range lock.Skills {
-		target := filepath.Join(targetRoot, locked.Name)
-		if err := copyDir(locked.InstalledPath, target); err != nil {
-			return nil, fmt.Errorf("deploy %s: %w", locked.Name, err)
+	var deployed []Result
+	for i, locked := range lock.Skills {
+		identity := locked.DisplayIdentity()
+		if options.Identity != "" && options.Identity != identity && options.Identity != locked.Name {
+			continue
 		}
-		deployed = append(deployed, locked.Name)
+		target := filepath.Join(targetRoot, skill.SafeIdentity(identity))
+		if options.DryRun {
+			deployed = append(deployed, Result{Identity: identity, DryRun: true})
+			continue
+		}
+		if _, err := os.Stat(target); err == nil && !options.Force {
+			return nil, fmt.Errorf("deploy %s: target already exists: %s", identity, target)
+		} else if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		if err := copyDir(locked.InstalledPath, target); err != nil {
+			return nil, fmt.Errorf("deploy %s: %w", identity, err)
+		}
+		lock.Skills[i].DeployedTo = appendRuntime(lock.Skills[i].DeployedTo, "codex")
+		deployed = append(deployed, Result{Identity: identity})
+	}
+	if options.Identity != "" && len(deployed) == 0 {
+		return nil, fmt.Errorf("unknown installed skill %q", options.Identity)
+	}
+	if !options.DryRun {
+		if err := install.SaveLock(lock); err != nil {
+			return nil, err
+		}
 	}
 	return deployed, nil
+}
+
+func appendRuntime(runtimes []string, runtime string) []string {
+	for _, existing := range runtimes {
+		if existing == runtime {
+			return runtimes
+		}
+	}
+	return append(runtimes, runtime)
 }
 
 func copyDir(src string, dst string) error {

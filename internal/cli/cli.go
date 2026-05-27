@@ -150,15 +150,33 @@ func runUpdate(stdout io.Writer) error {
 }
 
 func runDeploy(args []string, stdout io.Writer) error {
-	if len(args) != 1 || args[0] != "codex" {
-		return fmt.Errorf("usage: skillhub deploy codex")
+	if len(args) < 1 || args[0] != "codex" {
+		return fmt.Errorf("usage: skillhub deploy codex [identity] [--dry-run] [--force]")
 	}
-	deployed, err := deploy.DeployCodex()
+	options := deploy.Options{}
+	for _, arg := range args[1:] {
+		switch arg {
+		case "--dry-run":
+			options.DryRun = true
+		case "--force":
+			options.Force = true
+		default:
+			if options.Identity != "" {
+				return fmt.Errorf("usage: skillhub deploy codex [identity] [--dry-run] [--force]")
+			}
+			options.Identity = arg
+		}
+	}
+	deployed, err := deploy.DeployCodex(options)
 	if err != nil {
 		return err
 	}
-	for _, name := range deployed {
-		_, _ = fmt.Fprintf(stdout, "deployed %s to codex\n", name)
+	for _, result := range deployed {
+		if result.DryRun {
+			_, _ = fmt.Fprintf(stdout, "would deploy %s to codex\n", result.Identity)
+			continue
+		}
+		_, _ = fmt.Fprintf(stdout, "deployed %s to codex\n", result.Identity)
 	}
 	return nil
 }

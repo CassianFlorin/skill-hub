@@ -63,9 +63,10 @@ tags:
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "codex")
-	assertContains(t, stdout.String(), "deployed java-review to codex")
-	assertFileContains(t, filepath.Join(codexDir, "java-review", "SKILL.md"), "Review Java changes")
-	assertFileContains(t, filepath.Join(codexDir, "java-review", "references", "rules.md"), "Prefer focused reviews")
+	assertContains(t, stdout.String(), "deployed platform-team/java-review to codex")
+	assertFileContains(t, filepath.Join(codexDir, "platform-team__java-review", "SKILL.md"), "Review Java changes")
+	assertFileContains(t, filepath.Join(codexDir, "platform-team__java-review", "references", "rules.md"), "Prefer focused reviews")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"deployed_runtimes": [`)
 }
 
 func TestInstallFromExplicitLocalPath(t *testing.T) {
@@ -261,6 +262,70 @@ entry: SKILL.md
 	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "# Java Review")
 }
 
+func TestDeployCodexDryRunDoesNotWriteFiles(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex", "local/my-skill", "--dry-run")
+
+	assertContains(t, stdout.String(), "would deploy local/my-skill to codex")
+	assertPathMissing(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"))
+}
+
+func TestDeployCodexRequiresForceWhenTargetExists(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+	mustWriteFile(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Existing\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"deploy", "codex", "local/my-skill"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected deploy conflict")
+	}
+	assertContains(t, err.Error(), "target already exists")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex", "local/my-skill", "--force")
+	assertContains(t, stdout.String(), "deployed local/my-skill to codex")
+	assertFileContains(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Local Skill")
+}
+
 func writeGitSkill(t *testing.T, root string, name string, version string, description string) {
 	t.Helper()
 	skillDir := filepath.Join(root, name)
@@ -321,6 +386,15 @@ func readFile(t *testing.T, path string) string {
 func assertFileContains(t *testing.T, path string, want string) {
 	t.Helper()
 	assertContains(t, readFile(t, path), want)
+}
+
+func assertPathMissing(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err == nil {
+		t.Fatalf("expected %s to be missing", path)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", path, err)
+	}
 }
 
 func assertContains(t *testing.T, got string, want string) {
