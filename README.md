@@ -22,6 +22,7 @@ skillhub list
 skillhub update
 skillhub deploy codex
 skillhub deploy claude
+skillhub deploy status
 ```
 
 The CLI supports local registry installation and git registry installation. Git registries are cloned into a local cache on first use and refreshed with `git pull --ff-only` during install/update.
@@ -137,6 +138,8 @@ Claude deploy example:
 ```bash
 export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
 ./skillhub deploy claude platform-team/java-review --force
+./skillhub deploy status
+./skillhub deploy status codex
 ```
 
 ## Release

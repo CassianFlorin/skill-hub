@@ -562,6 +562,43 @@ targets:
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"claude"`)
 }
 
+func TestDeployStatusReportsRuntimeState(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	claudeDir := filepath.Join(workspace, "claude-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex", "local/my-skill", "--force")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "status")
+	assertContains(t, stdout.String(), "local/my-skill\tcodex\tdeployed")
+	assertContains(t, stdout.String(), "local/my-skill\tclaude\tmissing")
+
+	mustWriteFile(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Drifted\n")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "status", "codex")
+	assertContains(t, stdout.String(), "local/my-skill\tcodex\tdrifted")
+}
+
 func writeGitSkill(t *testing.T, root string, name string, version string, description string) {
 	t.Helper()
 	skillDir := filepath.Join(root, name)

@@ -42,6 +42,12 @@ type Result struct {
 	DryRun   bool
 }
 
+type Status struct {
+	Identity string
+	Runtime  string
+	State    string
+}
+
 func DeployCodex(options Options) ([]Result, error) {
 	targetRoot, err := CodexDir()
 	if err != nil {
@@ -56,6 +62,63 @@ func DeployClaude(options Options) ([]Result, error) {
 		return nil, err
 	}
 	return deployRuntime("claude", targetRoot, options)
+}
+
+func Statuses(runtime string) ([]Status, error) {
+	lock, err := install.LoadLock()
+	if err != nil {
+		return nil, err
+	}
+	runtimes := []string{}
+	switch runtime {
+	case "":
+		runtimes = []string{"codex", "claude"}
+	case "codex", "claude":
+		runtimes = []string{runtime}
+	default:
+		return nil, fmt.Errorf("unsupported runtime %q", runtime)
+	}
+	var statuses []Status
+	for _, locked := range lock.Skills {
+		for _, runtime := range runtimes {
+			targetRoot, err := runtimeDir(runtime)
+			if err != nil {
+				return nil, err
+			}
+			target := filepath.Join(targetRoot, skill.SafeIdentity(locked.DisplayIdentity()))
+			state := "missing"
+			if _, err := os.Stat(target); err == nil {
+				checksum, err := skill.ChecksumDir(target)
+				if err != nil {
+					return nil, err
+				}
+				if checksum == locked.Checksum {
+					state = "deployed"
+				} else {
+					state = "drifted"
+				}
+			} else if err != nil && !os.IsNotExist(err) {
+				return nil, err
+			}
+			statuses = append(statuses, Status{
+				Identity: locked.DisplayIdentity(),
+				Runtime:  runtime,
+				State:    state,
+			})
+		}
+	}
+	return statuses, nil
+}
+
+func runtimeDir(runtime string) (string, error) {
+	switch runtime {
+	case "codex":
+		return CodexDir()
+	case "claude":
+		return ClaudeDir()
+	default:
+		return "", fmt.Errorf("unsupported runtime %q", runtime)
+	}
 }
 
 func deployRuntime(runtime string, targetRoot string, options Options) ([]Result, error) {

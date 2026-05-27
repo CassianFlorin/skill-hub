@@ -236,6 +236,9 @@ func runDeploy(args []string, stdout io.Writer) error {
 		return fmt.Errorf("usage: skillhub deploy <codex|claude> [identity] [--dry-run] [--force]")
 	}
 	runtime := args[0]
+	if runtime == "status" {
+		return runDeployStatus(args[1:], stdout)
+	}
 	options := deploy.Options{}
 	for _, arg := range args[1:] {
 		switch arg {
@@ -269,6 +272,24 @@ func runDeploy(args []string, stdout io.Writer) error {
 			continue
 		}
 		_, _ = fmt.Fprintf(stdout, "deployed %s to %s\n", result.Identity, runtime)
+	}
+	return nil
+}
+
+func runDeployStatus(args []string, stdout io.Writer) error {
+	if len(args) > 1 {
+		return fmt.Errorf("usage: skillhub deploy status [codex|claude]")
+	}
+	runtime := ""
+	if len(args) == 1 {
+		runtime = args[0]
+	}
+	statuses, err := deploy.Statuses(runtime)
+	if err != nil {
+		return err
+	}
+	for _, status := range statuses {
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", status.Identity, status.Runtime, status.State)
 	}
 	return nil
 }
