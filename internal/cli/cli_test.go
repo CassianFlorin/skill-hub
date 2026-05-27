@@ -38,6 +38,8 @@ tags:
 	var stdout bytes.Buffer
 	runOK(t, projectDir, &stdout, "init")
 	assertFileContains(t, filepath.Join(projectDir, "skillhub.yaml"), `"install_dir"`)
+	assertFileContains(t, filepath.Join(projectDir, "skillhub.yaml"), `"hub"`)
+	assertFileContains(t, filepath.Join(projectDir, "skillhub.yaml"), `https://github.com/CassianFlorin/skill-hub-registry.git`)
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
@@ -332,7 +334,113 @@ tags:
 	assertFileContains(t, indexPath, `"identity": "platform/java-review"`)
 	assertFileContains(t, indexPath, `"version": "1.2.0"`)
 	assertFileContains(t, indexPath, `"targets": [`)
+	assertFileContains(t, indexPath, `"schema_version": "2"`)
+	assertFileContains(t, indexPath, `"source": {`)
+	assertFileContains(t, indexPath, `"type": "registry"`)
+	assertFileContains(t, indexPath, `"path": "java-review"`)
+	assertFileContains(t, indexPath, `"trust": {`)
+	assertFileContains(t, indexPath, `"level": "private"`)
+	assertFileContains(t, indexPath, `"updated_at": "`)
 	assertFileContains(t, indexPath, `"checksum": "sha256:`)
+	assertFileNotContains(t, indexPath, `"source_type"`)
+	assertFileNotContains(t, indexPath, `"source_path"`)
+}
+
+func TestRegistryIndexValidateRejectsOldSchema(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": []
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "index", "validate", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected old schema validation failure")
+	}
+	assertContains(t, err.Error(), "unsupported index schema")
+}
+
+func TestRegistryIndexValidateRejectsUnknownSourceAndTrust(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Java review skill",
+      "targets": ["codex"],
+      "source": {"type": "bogus", "path": "java-review"},
+      "trust": {"level": "mystery"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "index", "validate", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected unknown source type validation failure")
+	}
+	assertContains(t, err.Error(), `unsupported source type "bogus"`)
+}
+
+func TestRegistryIndexGenerateRejectsMissingCatalogRequiredFields(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "index", "generate", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected generate validation failure")
+	}
+	assertContains(t, err.Error(), "missing description")
+	assertPathMissing(t, filepath.Join(registryDir, "skillhub.index.json"))
 }
 
 func TestInstallUsesRegistryIndexForIdentityLookup(t *testing.T) {
@@ -347,7 +455,10 @@ func TestInstallUsesRegistryIndexForIdentityLookup(t *testing.T) {
 name: java-review
 namespace: platform
 version: 1.2.0
+description: Java review skill
 entry: SKILL.md
+targets:
+  - codex
 `)+"\n")
 	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
 
@@ -377,6 +488,8 @@ namespace: platform
 version: 1.2.0
 description: Java review skill
 entry: SKILL.md
+targets:
+  - codex
 tags:
   - java
   - review
@@ -392,7 +505,8 @@ tags:
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "search", "review")
 
-	assertContains(t, stdout.String(), "company\tplatform/java-review\t1.2.0\tJava review skill")
+	assertContains(t, stdout.String(), "company\tplatform/java-review\t1.2.0\tprivate\t-")
+	assertContains(t, stdout.String(), "Java review skill")
 }
 
 func TestInfoShowsRegistryIndexSkillDetails(t *testing.T) {
@@ -430,7 +544,452 @@ tags:
 	assertContains(t, stdout.String(), "version: 1.2.0")
 	assertContains(t, stdout.String(), "targets: codex, claude")
 	assertContains(t, stdout.String(), "tags: java")
+	assertContains(t, stdout.String(), "source.type: registry")
+	assertContains(t, stdout.String(), "source.path: java-review")
+	assertContains(t, stdout.String(), "trust: private")
+	assertContains(t, stdout.String(), "install: skillhub install company/platform/java-review")
 	assertContains(t, stdout.String(), "checksum: sha256:")
+}
+
+func TestRegistryListShowsConfiguredRegistries(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "list")
+
+	assertContains(t, stdout.String(), "hub\tgit\thttps://github.com/CassianFlorin/skill-hub-registry.git")
+	assertContains(t, stdout.String(), "company\tlocal\t"+registryDir)
+}
+
+func TestRegistrySyncValidatesLocalRegistryIndex(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+description: Java review skill
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "generate", "company")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "sync", "company")
+
+	assertContains(t, stdout.String(), "synced company with 1 skills")
+}
+
+func TestRegistrySyncDetectsMissingLocalSourcePath(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Java review skill",
+      "targets": ["codex"],
+      "source": {"type": "registry", "path": "missing-skill"},
+      "trust": {"level": "private"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "sync", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected sync validation failure")
+	}
+	assertContains(t, err.Error(), "validate platform/java-review")
+}
+
+func TestRegistrySyncRejectsEscapingLocalSourcePath(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	outsideSkillDir := filepath.Join(workspace, "outside-skill")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(outsideSkillDir, "skill.yaml"), strings.TrimSpace(`
+name: outside-skill
+namespace: platform
+version: 1.2.0
+description: Outside skill
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(outsideSkillDir, "SKILL.md"), "# Outside Skill\n")
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/outside-skill",
+      "name": "outside-skill",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Outside skill",
+      "targets": ["codex"],
+      "source": {"type": "registry", "path": "../outside-skill"},
+      "trust": {"level": "private"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "sync", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected escaping source path validation failure")
+	}
+	assertContains(t, err.Error(), "escapes registry root")
+}
+
+func TestInstallRejectsEscapingRegistrySourcePath(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	outsideSkillDir := filepath.Join(workspace, "outside-skill")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(outsideSkillDir, "skill.yaml"), strings.TrimSpace(`
+name: outside-skill
+namespace: platform
+version: 1.2.0
+description: Outside skill
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(outsideSkillDir, "SKILL.md"), "# Outside Skill\n")
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/outside-skill",
+      "name": "outside-skill",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Outside skill",
+      "targets": ["codex"],
+      "source": {"type": "registry", "path": "../outside-skill"},
+      "trust": {"level": "private"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"install", "company/platform/outside-skill"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected escaping source path install failure")
+	}
+	assertContains(t, err.Error(), "escapes registry root")
+}
+
+func TestInstallRejectsEscapingExternalGitSourcePath(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	remoteWorktree := filepath.Join(workspace, "remote-worktree")
+	remoteRepo := filepath.Join(workspace, "skills.git")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeGitSkill(t, filepath.Join(remoteWorktree, "safe"), "outside-skill", "1.2.0", "Outside skill")
+	git(t, remoteWorktree, "init")
+	git(t, remoteWorktree, "config", "user.email", "skillhub@example.com")
+	git(t, remoteWorktree, "config", "user.name", "SkillHub Test")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "initial skill")
+	git(t, workspace, "clone", "--bare", remoteWorktree, remoteRepo)
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "safe/outside-skill",
+      "name": "outside-skill",
+      "namespace": "safe",
+      "version": "1.2.0",
+      "description": "Outside skill",
+      "targets": ["codex"],
+      "source": {"type": "git", "url": "`+remoteRepo+`", "path": "../safe/outside-skill"},
+      "trust": {"level": "curated"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"install", "company/safe/outside-skill"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected escaping external git source path install failure")
+	}
+	assertContains(t, err.Error(), "escapes registry root")
+}
+
+func TestCatalogListAndFeaturedShowSyncedSkills(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Java review skill",
+      "targets": ["codex", "claude"],
+      "tags": ["java", "review"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "java-review", "ref": "v1.2.0"},
+      "maintainers": ["platform-team"],
+      "license": "MIT",
+      "trust": {"level": "curated", "reviewed_at": "2026-05-27"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "list", "--target", "codex", "--tag", "java")
+	assertContains(t, stdout.String(), "company/platform/java-review")
+	assertContains(t, stdout.String(), "curated")
+	assertContains(t, stdout.String(), "featured")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "featured")
+	assertContains(t, stdout.String(), "company/platform/java-review")
+}
+
+func TestInstallFromCatalogExternalGitSource(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	remoteWorktree := filepath.Join(workspace, "remote-worktree")
+	remoteRepo := filepath.Join(workspace, "skills.git")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	writeGitSkill(t, remoteWorktree, "java-review", "1.2.0", "External Java review skill")
+	git(t, remoteWorktree, "init")
+	git(t, remoteWorktree, "config", "user.email", "skillhub@example.com")
+	git(t, remoteWorktree, "config", "user.name", "SkillHub Test")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "initial skill")
+	git(t, remoteWorktree, "tag", "v1.2.0")
+	git(t, workspace, "clone", "--bare", remoteWorktree, remoteRepo)
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "company/java-review",
+      "name": "java-review",
+      "namespace": "company",
+      "version": "1.2.0",
+      "description": "External Java review skill",
+      "targets": ["codex"],
+      "tags": ["java"],
+      "source": {"type": "git", "url": "`+remoteRepo+`", "path": "java-review", "ref": "v1.2.0"},
+      "trust": {"level": "curated"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/company/java-review")
+
+	assertContains(t, stdout.String(), "installed company/java-review@1.2.0")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "External Java review skill")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_type": "git"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_url": "`+remoteRepo+`"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_ref": "v1.2.0"`)
+}
+
+func TestInstallFromIndexedGitRegistryHonorsPinnedRef(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	remoteWorktree := filepath.Join(workspace, "remote-worktree")
+	remoteRepo := filepath.Join(workspace, "skills.git")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	writeGitSkill(t, remoteWorktree, "java-review", "1.2.0", "Git Java review skill v1.2.0")
+	mustWriteIndex(t, remoteWorktree, "company", "company/java-review", "java-review", "1.2.0", "Git Java review skill v1.2.0")
+	git(t, remoteWorktree, "init")
+	git(t, remoteWorktree, "config", "user.email", "skillhub@example.com")
+	git(t, remoteWorktree, "config", "user.name", "SkillHub Test")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "initial skill")
+	git(t, remoteWorktree, "tag", "v1.2.0")
+	writeGitSkill(t, remoteWorktree, "java-review", "1.3.0", "Git Java review skill v1.3.0")
+	mustWriteIndex(t, remoteWorktree, "company", "company/java-review", "java-review", "1.3.0", "Git Java review skill v1.3.0")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "bump skill")
+	git(t, workspace, "clone", "--bare", remoteWorktree, remoteRepo)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "git", "company", remoteRepo)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review@v1.2.0")
+
+	assertContains(t, stdout.String(), "installed company/java-review@1.2.0")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "v1.2.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_type": "git"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_ref": "v1.2.0"`)
+}
+
+func TestUpdateCatalogExternalGitSourceUsesRecordedSubpathAndRef(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	remoteWorktree := filepath.Join(workspace, "remote-worktree")
+	remoteRepo := filepath.Join(workspace, "skills.git")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	writeNestedGitSkill(t, remoteWorktree, filepath.Join("nested", "java-review"), "java-review", "1.2.0", "External Java review skill v1.2.0")
+	git(t, remoteWorktree, "init")
+	git(t, remoteWorktree, "config", "user.email", "skillhub@example.com")
+	git(t, remoteWorktree, "config", "user.name", "SkillHub Test")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "initial skill")
+	git(t, remoteWorktree, "tag", "v1.2.0")
+	git(t, workspace, "clone", "--bare", remoteWorktree, remoteRepo)
+	writeNestedGitSkill(t, remoteWorktree, filepath.Join("nested", "java-review"), "java-review", "1.3.0", "External Java review skill v1.3.0")
+	git(t, remoteWorktree, "add", ".")
+	git(t, remoteWorktree, "commit", "-m", "bump skill")
+	git(t, remoteWorktree, "push", remoteRepo, "HEAD")
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "company/java-review",
+      "name": "java-review",
+      "namespace": "company",
+      "version": "1.2.0",
+      "description": "External Java review skill",
+      "targets": ["codex"],
+      "tags": ["java"],
+      "source": {"type": "git", "url": "`+remoteRepo+`", "path": "nested/java-review", "ref": "v1.2.0"},
+      "trust": {"level": "curated"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/company/java-review")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "v1.2.0")
+	lockPath := filepath.Join(home, "skillhub.lock")
+	mustWriteFile(t, lockPath, withoutLinesContaining(readFile(t, lockPath), "source_subpath", "source_cache"))
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update")
+
+	assertContains(t, stdout.String(), "all skills are current")
+	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "v1.2.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_subpath": "nested/java-review"`)
 }
 
 func TestRegistryIndexValidateDetectsChecksumDrift(t *testing.T) {
@@ -444,7 +1003,10 @@ func TestRegistryIndexValidateDetectsChecksumDrift(t *testing.T) {
 name: java-review
 namespace: platform
 version: 1.2.0
+description: Java review skill
 entry: SKILL.md
+targets:
+  - codex
 `)+"\n")
 	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
 
@@ -463,6 +1025,13 @@ entry: SKILL.md
 	err := Run([]string{"registry", "index", "validate", "company"}, &stdout, stderr, projectDir)
 	if err == nil {
 		t.Fatal("expected checksum validation failure")
+	}
+	assertContains(t, err.Error(), "checksum mismatch for platform/java-review")
+
+	stdout.Reset()
+	err = Run([]string{"registry", "sync", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected sync checksum validation failure")
 	}
 	assertContains(t, err.Error(), "checksum mismatch for platform/java-review")
 }
@@ -681,6 +1250,47 @@ targets:
 	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# "+name+"\n\n"+description+"\n")
 }
 
+func writeNestedGitSkill(t *testing.T, root string, subpath string, name string, version string, description string) {
+	t.Helper()
+	skillDir := filepath.Join(root, subpath)
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: `+name+`
+namespace: company
+version: `+version+`
+description: `+description+`
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# "+name+"\n\n"+description+"\n")
+}
+
+func mustWriteIndex(t *testing.T, root string, registry string, identity string, sourcePath string, version string, description string) {
+	t.Helper()
+	mustWriteFile(t, filepath.Join(root, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "`+registry+`",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "`+identity+`",
+      "name": "java-review",
+      "namespace": "company",
+      "version": "`+version+`",
+      "description": "`+description+`",
+      "targets": ["codex"],
+      "tags": ["java"],
+      "source": {"type": "registry", "path": "`+sourcePath+`"},
+      "trust": {"level": "private"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -751,4 +1361,21 @@ func assertContains(t *testing.T, got string, want string) {
 	if !strings.Contains(got, want) {
 		t.Fatalf("expected %q to contain %q", got, want)
 	}
+}
+
+func withoutLinesContaining(content string, markers ...string) string {
+	var kept []string
+	for _, line := range strings.Split(content, "\n") {
+		remove := false
+		for _, marker := range markers {
+			if strings.Contains(line, marker) {
+				remove = true
+				break
+			}
+		}
+		if !remove {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
 }

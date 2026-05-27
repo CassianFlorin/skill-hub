@@ -22,6 +22,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return runInit(stdout, workDir)
 	case "registry":
 		return runRegistry(args[1:], stdout, workDir)
+	case "catalog":
+		return runCatalog(args[1:], stdout, workDir)
 	case "search":
 		return runSearch(args[1:], stdout, workDir)
 	case "info":
@@ -107,15 +109,19 @@ func runInit(stdout io.Writer, workDir string) error {
 
 func runRegistry(args []string, stdout io.Writer, workDir string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: skillhub registry <add|index>")
+		return fmt.Errorf("usage: skillhub registry <add|list|sync|index>")
 	}
 	switch args[0] {
 	case "add":
 		return runRegistryAdd(args[1:], stdout, workDir)
+	case "list":
+		return runRegistryList(stdout, workDir)
+	case "sync":
+		return runRegistrySync(args[1:], stdout, workDir)
 	case "index":
 		return runRegistryIndex(args[1:], stdout, workDir)
 	default:
-		return fmt.Errorf("usage: skillhub registry <add|index>")
+		return fmt.Errorf("usage: skillhub registry <add|list|sync|index>")
 	}
 }
 
@@ -182,6 +188,110 @@ func runRegistryIndex(args []string, stdout io.Writer, workDir string) error {
 	return nil
 }
 
+func runRegistryList(stdout io.Writer, workDir string) error {
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	for _, status := range registry.ListRegistries(cfg) {
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\t%d\t%s\n", status.Name, status.Type, status.Location, status.SkillCount, status.GeneratedAt)
+	}
+	return nil
+}
+
+func runRegistrySync(args []string, stdout io.Writer, workDir string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillhub registry sync <registry|--all>")
+	}
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	if args[0] == "--all" {
+		for _, status := range registry.ListRegistries(cfg) {
+			reg := cfg.Registries[status.Name]
+			count, err := registry.SyncRegistry(status.Name, reg)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(stdout, "synced %s with %d skills\n", status.Name, count)
+		}
+		return nil
+	}
+	reg, ok := cfg.Registries[args[0]]
+	if !ok {
+		return fmt.Errorf("unknown registry %q", args[0])
+	}
+	count, err := registry.SyncRegistry(args[0], reg)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "synced %s with %d skills\n", args[0], count)
+	return nil
+}
+
+func runCatalog(args []string, stdout io.Writer, workDir string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: skillhub catalog <list|featured>")
+	}
+	switch args[0] {
+	case "list":
+		return runCatalogList(args[1:], stdout, workDir, false)
+	case "featured":
+		return runCatalogList(args[1:], stdout, workDir, true)
+	default:
+		return fmt.Errorf("usage: skillhub catalog <list|featured>")
+	}
+}
+
+func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnly bool) error {
+	filter := registry.CatalogFilter{}
+	if featuredOnly {
+		featured := true
+		filter.Featured = &featured
+	}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--registry":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--registry requires a value")
+			}
+			filter.Registry = args[i]
+		case "--target":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--target requires a value")
+			}
+			filter.Target = args[i]
+		case "--tag":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--tag requires a value")
+			}
+			filter.Tag = args[i]
+		default:
+			return fmt.Errorf("unknown catalog option %q", args[i])
+		}
+	}
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	results, err := registry.ListCatalog(cfg, filter)
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		_, _ = fmt.Fprintln(stdout, "no catalog skills found")
+		return nil
+	}
+	for _, result := range results {
+		_, _ = fmt.Fprintf(stdout, "%s/%s\t%s\t%s\t%s\t%s\t%s\n", result.Registry, result.Skill.Identity, result.Skill.Version, strings.Join(result.Skill.Targets, ","), result.Skill.Trust.Level, featuredLabel(result.Skill.Featured), result.Skill.Description)
+	}
+	return nil
+}
+
 func runSearch(args []string, stdout io.Writer, workDir string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: skillhub search <query>")
@@ -199,7 +309,7 @@ func runSearch(args []string, stdout io.Writer, workDir string) error {
 		return nil
 	}
 	for _, result := range results {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", result.Registry, result.Skill.Identity, result.Skill.Version, result.Skill.Description)
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", result.Registry, result.Skill.Identity, result.Skill.Version, result.Skill.Trust.Level, featuredLabel(result.Skill.Featured), result.Skill.Description)
 	}
 	return nil
 }
@@ -228,10 +338,25 @@ func runInfo(args []string, stdout io.Writer, workDir string) error {
 	_, _ = fmt.Fprintf(stdout, "description: %s\n", indexed.Description)
 	_, _ = fmt.Fprintf(stdout, "targets: %s\n", strings.Join(indexed.Targets, ", "))
 	_, _ = fmt.Fprintf(stdout, "tags: %s\n", strings.Join(indexed.Tags, ", "))
-	_, _ = fmt.Fprintf(stdout, "source_type: %s\n", indexed.SourceType)
-	_, _ = fmt.Fprintf(stdout, "source_path: %s\n", indexed.SourcePath)
+	_, _ = fmt.Fprintf(stdout, "source.type: %s\n", indexed.Source.Type)
+	_, _ = fmt.Fprintf(stdout, "source.url: %s\n", indexed.Source.URL)
+	_, _ = fmt.Fprintf(stdout, "source.path: %s\n", indexed.Source.Path)
+	_, _ = fmt.Fprintf(stdout, "source.ref: %s\n", indexed.Source.Ref)
+	_, _ = fmt.Fprintf(stdout, "maintainers: %s\n", strings.Join(indexed.Maintainers, ", "))
+	_, _ = fmt.Fprintf(stdout, "license: %s\n", indexed.License)
+	_, _ = fmt.Fprintf(stdout, "trust: %s\n", indexed.Trust.Level)
+	_, _ = fmt.Fprintf(stdout, "featured: %t\n", indexed.Featured)
+	_, _ = fmt.Fprintf(stdout, "updated_at: %s\n", indexed.UpdatedAt)
 	_, _ = fmt.Fprintf(stdout, "checksum: %s\n", indexed.Checksum)
+	_, _ = fmt.Fprintf(stdout, "install: skillhub install %s/%s\n", result.Registry, indexed.Identity)
 	return nil
+}
+
+func featuredLabel(featured bool) string {
+	if featured {
+		return "featured"
+	}
+	return "-"
 }
 
 func runList(stdout io.Writer) error {
@@ -328,6 +453,6 @@ func runDeployStatus(args []string, stdout io.Writer) error {
 }
 
 func usage(stderr io.Writer) error {
-	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|search|info|install|rollback|uninstall|list|update|deploy>")
+	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|catalog|search|info|install|rollback|uninstall|list|update|deploy>")
 	return fmt.Errorf("invalid command")
 }

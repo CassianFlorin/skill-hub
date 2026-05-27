@@ -2,7 +2,7 @@
 
 `skill-hub` is a Skill package manager for AI agents. It treats a Skill as an installable package with metadata, installed files, lockfile state, registry indexing, and runtime deploy targets.
 
-## MVP scope
+## Current scope
 
 Implemented commands:
 
@@ -10,8 +10,14 @@ Implemented commands:
 skillhub init
 skillhub registry add local company ./examples/local-registry
 skillhub registry add git company git@gitlab.example.com:ai/skills.git
+skillhub registry list
+skillhub registry sync hub
+skillhub registry sync --all
 skillhub registry index generate company
 skillhub registry index validate company
+skillhub catalog list
+skillhub catalog featured
+skillhub catalog list --target codex --tag java
 skillhub search java
 skillhub info company/platform-team/java-review
 skillhub install company/java-review
@@ -26,7 +32,46 @@ skillhub deploy claude
 skillhub deploy status
 ```
 
-The CLI supports local registry installation and git registry installation. Git registries are cloned into a local cache on first use and refreshed with `git pull --ff-only` during install/update.
+The CLI supports local registry installation, git registry installation, and catalog discovery. Git registries are cloned into a local cache during explicit sync or install, and refreshed with `git pull --ff-only`.
+
+## Catalog discovery
+
+`skillhub init` configures the default `hub` registry at `https://github.com/CassianFlorin/skill-hub-registry.git`. Run `skillhub registry sync hub` to clone or refresh it locally, then use `skillhub catalog featured`, `skillhub catalog list`, `skillhub search <query>`, and `skillhub info <registry>/<identity>` to discover installable skills.
+
+Registries use `skillhub.index.json` schema v2. Old index files without `schema_version: "2"` are rejected by validation.
+
+```json
+{
+  "schema_version": "2",
+  "registry": "hub",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "official/java-review",
+      "name": "java-review",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "Review Java service code with repo-aware checks.",
+      "targets": ["codex", "claude"],
+      "tags": ["java", "review"],
+      "source": {
+        "type": "git",
+        "url": "https://github.com/CassianFlorin/skills.git",
+        "path": "java-review",
+        "ref": "v0.1.0"
+      },
+      "maintainers": ["CassianFlorin"],
+      "license": "MIT",
+      "trust": {
+        "level": "official",
+        "reviewed_at": "2026-05-27"
+      },
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+```
 
 Skills are displayed as `namespace/name`, using this priority:
 
@@ -99,6 +144,8 @@ Git registry example:
 
 ```bash
 ./skillhub registry add git team git@github.com:your-org/skills.git
+./skillhub registry sync team
+./skillhub catalog list --registry team
 ./skillhub install team/java-review
 ./skillhub update
 ```
@@ -138,6 +185,8 @@ Registry index example:
 ```bash
 ./skillhub registry index generate company
 ./skillhub registry index validate company
+./skillhub registry list
+./skillhub catalog list --registry company
 ./skillhub search java
 ./skillhub info company/platform-team/java-review
 ./skillhub install company/platform-team/java-review

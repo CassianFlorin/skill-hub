@@ -7,7 +7,12 @@ import (
 	"path/filepath"
 )
 
-const FileName = "skillhub.yaml"
+const (
+	FileName       = "skillhub.yaml"
+	DefaultHubName = "hub"
+	DefaultHubURL  = "https://github.com/CassianFlorin/skill-hub-registry.git"
+	DefaultHubType = "git"
+)
 
 type Config struct {
 	InstallDir string              `json:"install_dir"`
@@ -42,7 +47,9 @@ func NewDefault() (Config, error) {
 	}
 	return Config{
 		InstallDir: filepath.Join(home, "installed"),
-		Registries: map[string]Registry{},
+		Registries: map[string]Registry{
+			DefaultHubName: {Type: DefaultHubType, URL: DefaultHubURL},
+		},
 	}, nil
 }
 

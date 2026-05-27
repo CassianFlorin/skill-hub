@@ -34,6 +34,8 @@ type LockedSkill struct {
 	SourceRef      string   `json:"source_ref,omitempty"`
 	SourceCommit   string   `json:"source_commit,omitempty"`
 	SourcePath     string   `json:"source_path"`
+	SourceSubpath  string   `json:"source_subpath,omitempty"`
+	SourceCache    string   `json:"source_cache,omitempty"`
 	Checksum       string   `json:"checksum,omitempty"`
 	InstalledPath  string   `json:"installed_path"`
 	Targets        []string `json:"targets,omitempty"`
@@ -89,17 +91,17 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	if err != nil {
 		return LockedSkill{}, err
 	}
-	sourcePath, sourceType, sourceRegistry, sourceURL, sourceRef, sourceCommit, err := resolveSource(workDir, cfg, spec)
+	source, err := resolveSource(workDir, cfg, spec)
 	if err != nil {
 		return LockedSkill{}, err
 	}
-	meta, err := skill.LoadCompatibleMetadata(sourcePath, sourceRegistry)
+	meta, err := skill.LoadCompatibleMetadata(source.Path, source.Registry)
 	if err != nil {
 		return LockedSkill{}, err
 	}
 	identity := skill.Identity(meta.Namespace, meta.Name)
-	if sourceRef != "" && sourceType != "git" && meta.Version != sourceRef {
-		return LockedSkill{}, fmt.Errorf("version %s not available for %s", sourceRef, identity)
+	if source.Ref != "" && source.Type != registry.SourceTypeGit && meta.Version != source.Ref {
+		return LockedSkill{}, fmt.Errorf("version %s not available for %s", source.Ref, identity)
 	}
 	lock, err := LoadLock()
 	if err != nil {
@@ -111,7 +113,7 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 		}
 	}
 	installedPath := filepath.Join(cfg.InstallDir, skill.SafeIdentity(identity))
-	if err := copyDir(sourcePath, installedPath); err != nil {
+	if err := copyDir(source.Path, installedPath); err != nil {
 		return LockedSkill{}, err
 	}
 	if meta.Generated {
@@ -129,12 +131,14 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 		Namespace:      meta.Namespace,
 		Version:        meta.Version,
 		Description:    meta.Description,
-		SourceType:     sourceType,
-		SourceRegistry: sourceRegistry,
-		SourceURL:      sourceURL,
-		SourceRef:      sourceRef,
-		SourceCommit:   sourceCommit,
-		SourcePath:     sourcePath,
+		SourceType:     source.Type,
+		SourceRegistry: source.Registry,
+		SourceURL:      source.URL,
+		SourceRef:      source.Ref,
+		SourceCommit:   source.Commit,
+		SourcePath:     source.Path,
+		SourceSubpath:  source.Subpath,
+		SourceCache:    source.CacheName,
 		Checksum:       checksum,
 		InstalledPath:  installedPath,
 		Targets:        meta.Targets,
@@ -220,13 +224,46 @@ func UpdateAll() ([][3]string, error) {
 	}
 	var changes [][3]string
 	for i, locked := range lock.Skills {
-		if locked.SourceType == "git" {
-			cachePath, err := registry.EnsureGitCache(locked.SourceRegistry, locked.SourceURL)
+		if locked.SourceType == registry.SourceTypeGit {
+			cacheName := locked.SourceCache
+			sourceSubpath := locked.SourceSubpath
+			if inferredCache, inferredSubpath, ok := inferCachedSource(locked.SourcePath, locked.SourceRef); ok {
+				if cacheName == "" {
+					cacheName = inferredCache
+				}
+				if sourceSubpath == "" {
+					sourceSubpath = inferredSubpath
+				}
+			}
+			if cacheName == "" {
+				cacheName = locked.SourceRegistry
+			}
+			if sourceSubpath == "" {
+				sourceSubpath = locked.Name
+			}
+			var cachePath string
+			var commit string
+			var err error
+			if locked.SourceRef != "" {
+				cachePath, commit, err = registry.EnsureGitCacheAtRef(cacheName, locked.SourceURL, locked.SourceRef)
+			} else {
+				cachePath, err = registry.EnsureGitCache(cacheName, locked.SourceURL)
+				if err == nil {
+					commit, err = registry.GitCommit(cachePath)
+				}
+			}
 			if err != nil {
 				return nil, fmt.Errorf("update %s: %w", locked.Name, err)
 			}
-			locked.SourcePath = filepath.Join(cachePath, locked.Name)
+			resolvedPath, err := registry.RegistrySourcePath(cachePath, sourceSubpath)
+			if err != nil {
+				return nil, fmt.Errorf("update %s: %w", locked.Name, err)
+			}
+			locked.SourcePath = resolvedPath
 			lock.Skills[i].SourcePath = locked.SourcePath
+			lock.Skills[i].SourceCommit = commit
+			lock.Skills[i].SourceSubpath = filepath.ToSlash(sourceSubpath)
+			lock.Skills[i].SourceCache = cacheName
 		}
 		meta, err := skill.LoadCompatibleMetadata(locked.SourcePath, locked.SourceRegistry)
 		if err != nil {
@@ -262,6 +299,32 @@ func UpdateAll() ([][3]string, error) {
 		return nil, err
 	}
 	return changes, nil
+}
+
+func inferCachedSource(sourcePath string, sourceRef string) (cacheName string, sourceSubpath string, ok bool) {
+	if sourcePath == "" {
+		return "", "", false
+	}
+	dir := sourcePath
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			rel, err := filepath.Rel(dir, sourcePath)
+			if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+				return "", "", false
+			}
+			name := filepath.Base(dir)
+			if sourceRef != "" {
+				suffix := "__" + skill.SafeIdentity(sourceRef)
+				name = strings.TrimSuffix(name, suffix)
+			}
+			return name, filepath.ToSlash(rel), true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", "", false
+		}
+		dir = parent
+	}
 }
 
 type historyManifest struct {
@@ -369,44 +432,151 @@ func (s LockedSkill) DisplayIdentity() string {
 	return s.Name
 }
 
-func resolveSource(workDir string, cfg config.Config, spec string) (path string, sourceType string, registryName string, sourceURL string, sourceRef string, sourceCommit string, err error) {
+type resolvedSource struct {
+	Path      string
+	Type      string
+	Registry  string
+	URL       string
+	Ref       string
+	Commit    string
+	Subpath   string
+	CacheName string
+}
+
+func resolveSource(workDir string, cfg config.Config, spec string) (resolvedSource, error) {
+	var sourceRef string
 	spec, sourceRef = splitPinnedRef(spec)
 	if looksLikePath(spec) {
 		abs, err := absoluteFrom(workDir, spec)
 		if err != nil {
-			return "", "", "", "", "", "", err
+			return resolvedSource{}, err
 		}
-		return abs, "local", "", "", sourceRef, "", nil
+		return resolvedSource{Path: abs, Type: "local", Ref: sourceRef}, nil
 	}
 	registryName, skillName, ok := strings.Cut(spec, "/")
 	if !ok || registryName == "" || skillName == "" {
-		return "", "", "", "", "", "", fmt.Errorf("install spec must be a path or registry/skill")
+		return resolvedSource{}, fmt.Errorf("install spec must be a path or registry/skill")
 	}
 	reg, ok := cfg.Registries[registryName]
 	if !ok {
-		return "", "", "", "", "", "", fmt.Errorf("unknown registry %q", registryName)
+		return resolvedSource{}, fmt.Errorf("unknown registry %q", registryName)
 	}
 	switch reg.Type {
 	case "local":
-		if indexedPath, ok, err := registry.ResolveIndexedPath(reg.Path, skillName); err != nil {
-			return "", "", "", "", "", "", err
+		if indexed, ok, err := registry.ResolveIndexedSkill(reg.Path, skillName); err != nil {
+			return resolvedSource{}, err
 		} else if ok {
-			return indexedPath, "registry", registryName, "", sourceRef, "", nil
+			return resolveIndexedSource(registryName, reg.Path, "", "", indexed, sourceRef)
 		}
-		return filepath.Join(reg.Path, skillName), "registry", registryName, "", sourceRef, "", nil
+		return resolvedSource{
+			Path:     filepath.Join(reg.Path, skillName),
+			Type:     registry.SourceTypeRegistry,
+			Registry: registryName,
+			Ref:      sourceRef,
+			Subpath:  filepath.ToSlash(skillName),
+		}, nil
 	case "git":
-		cachePath, commit, err := registry.EnsureGitCacheAtRef(registryName, reg.URL, sourceRef)
+		if sourceRef != "" {
+			cachePath, commit, err := registry.EnsureGitCacheAtRef(registryName, reg.URL, sourceRef)
+			if err != nil {
+				return resolvedSource{}, err
+			}
+			if indexed, ok, err := registry.ResolveIndexedSkill(cachePath, skillName); err != nil {
+				return resolvedSource{}, err
+			} else if ok {
+				return resolveIndexedSource(registryName, cachePath, reg.URL, commit, indexed, sourceRef)
+			}
+			return resolvedSource{
+				Path:      filepath.Join(cachePath, skillName),
+				Type:      registry.SourceTypeGit,
+				Registry:  registryName,
+				URL:       reg.URL,
+				Ref:       sourceRef,
+				Commit:    commit,
+				Subpath:   filepath.ToSlash(skillName),
+				CacheName: registryName,
+			}, nil
+		}
+		cachePath, err := registry.EnsureGitCache(registryName, reg.URL)
 		if err != nil {
-			return "", "", "", "", "", "", err
+			return resolvedSource{}, err
 		}
-		if indexedPath, ok, err := registry.ResolveIndexedPath(cachePath, skillName); err != nil {
-			return "", "", "", "", "", "", err
+		commit, err := registry.GitCommit(cachePath)
+		if err != nil {
+			return resolvedSource{}, err
+		}
+		if indexed, ok, err := registry.ResolveIndexedSkill(cachePath, skillName); err != nil {
+			return resolvedSource{}, err
 		} else if ok {
-			return indexedPath, "git", registryName, reg.URL, sourceRef, commit, nil
+			return resolveIndexedSource(registryName, cachePath, reg.URL, commit, indexed, "")
 		}
-		return filepath.Join(cachePath, skillName), "git", registryName, reg.URL, sourceRef, commit, nil
+		return resolvedSource{
+			Path:      filepath.Join(cachePath, skillName),
+			Type:      registry.SourceTypeGit,
+			Registry:  registryName,
+			URL:       reg.URL,
+			Commit:    commit,
+			Subpath:   filepath.ToSlash(skillName),
+			CacheName: registryName,
+		}, nil
 	default:
-		return "", "", "", "", "", "", fmt.Errorf("unsupported registry type %q", reg.Type)
+		return resolvedSource{}, fmt.Errorf("unsupported registry type %q", reg.Type)
+	}
+}
+
+func resolveIndexedSource(registryName string, root string, registryURL string, registryCommit string, indexed registry.IndexSkill, sourceRef string) (resolvedSource, error) {
+	ref := sourceRef
+	if ref == "" {
+		ref = indexed.Source.Ref
+	}
+	switch indexed.Source.Type {
+	case registry.SourceTypeRegistry:
+		sourcePath, err := registry.RegistrySourcePath(root, indexed.Source.Path)
+		if err != nil {
+			return resolvedSource{}, err
+		}
+		sourceType := registry.SourceTypeRegistry
+		sourceURL := ""
+		sourceCommit := ""
+		cacheName := ""
+		if registryURL != "" {
+			sourceType = registry.SourceTypeGit
+			sourceURL = registryURL
+			sourceCommit = registryCommit
+			cacheName = registryName
+		}
+		return resolvedSource{
+			Path:      sourcePath,
+			Type:      sourceType,
+			Registry:  registryName,
+			URL:       sourceURL,
+			Ref:       ref,
+			Commit:    sourceCommit,
+			Subpath:   indexed.Source.Path,
+			CacheName: cacheName,
+		}, nil
+	case registry.SourceTypeGit:
+		cacheName := registryName + "__" + skill.SafeIdentity(indexed.Identity)
+		cachePath, commit, err := registry.EnsureGitCacheAtRef(cacheName, indexed.Source.URL, ref)
+		if err != nil {
+			return resolvedSource{}, err
+		}
+		sourcePath, err := registry.RegistrySourcePath(cachePath, indexed.Source.Path)
+		if err != nil {
+			return resolvedSource{}, err
+		}
+		return resolvedSource{
+			Path:      sourcePath,
+			Type:      registry.SourceTypeGit,
+			Registry:  registryName,
+			URL:       indexed.Source.URL,
+			Ref:       ref,
+			Commit:    commit,
+			Subpath:   indexed.Source.Path,
+			CacheName: cacheName,
+		}, nil
+	default:
+		return resolvedSource{}, fmt.Errorf("unsupported catalog source type %q", indexed.Source.Type)
 	}
 }
 

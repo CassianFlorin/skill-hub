@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,25 +13,53 @@ import (
 	"github.com/cassian/skill-hub/internal/skill"
 )
 
-const IndexFileName = "skillhub.index.json"
+const (
+	IndexFileName      = "skillhub.index.json"
+	IndexSchemaVersion = "2"
+	SourceTypeRegistry = "registry"
+	SourceTypeGit      = "git"
+	TrustOfficial      = "official"
+	TrustCurated       = "curated"
+	TrustCommunity     = "community"
+	TrustPrivate       = "private"
+	TrustUnknown       = "unknown"
+)
 
 type Index struct {
-	Registry    string       `json:"registry"`
-	GeneratedAt string       `json:"generated_at"`
-	Skills      []IndexSkill `json:"skills"`
+	SchemaVersion string       `json:"schema_version"`
+	Registry      string       `json:"registry"`
+	GeneratedAt   string       `json:"generated_at"`
+	Skills        []IndexSkill `json:"skills"`
 }
 
 type IndexSkill struct {
-	Identity    string   `json:"identity"`
-	Name        string   `json:"name"`
-	Namespace   string   `json:"namespace"`
-	Version     string   `json:"version"`
-	Description string   `json:"description,omitempty"`
-	Targets     []string `json:"targets,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	SourceType  string   `json:"source_type"`
-	SourcePath  string   `json:"source_path"`
-	Checksum    string   `json:"checksum,omitempty"`
+	Identity    string      `json:"identity"`
+	Name        string      `json:"name"`
+	Namespace   string      `json:"namespace"`
+	Version     string      `json:"version"`
+	Description string      `json:"description"`
+	Targets     []string    `json:"targets"`
+	Tags        []string    `json:"tags,omitempty"`
+	Source      IndexSource `json:"source"`
+	Maintainers []string    `json:"maintainers,omitempty"`
+	License     string      `json:"license,omitempty"`
+	Trust       IndexTrust  `json:"trust"`
+	Featured    bool        `json:"featured"`
+	UpdatedAt   string      `json:"updated_at"`
+	Checksum    string      `json:"checksum,omitempty"`
+}
+
+type IndexSource struct {
+	Type string `json:"type"`
+	URL  string `json:"url,omitempty"`
+	Path string `json:"path"`
+	Ref  string `json:"ref,omitempty"`
+}
+
+type IndexTrust struct {
+	Level      string `json:"level"`
+	ReviewedAt string `json:"reviewed_at,omitempty"`
+	Reviewer   string `json:"reviewer,omitempty"`
 }
 
 type SearchResult struct {
@@ -42,7 +71,7 @@ func SearchIndexes(cfg config.Config, query string) ([]SearchResult, error) {
 	query = strings.ToLower(query)
 	var results []SearchResult
 	for name, reg := range cfg.Registries {
-		root, _, err := registryRoot(name, reg)
+		root, err := registryRootNoSync(name, reg)
 		if err != nil {
 			return nil, err
 		}
@@ -66,24 +95,22 @@ func FindIndexedSkill(cfg config.Config, spec string) (SearchResult, bool, error
 	registryName, identity, ok := strings.Cut(spec, "/")
 	if ok {
 		if reg, exists := cfg.Registries[registryName]; exists {
-			root, _, err := registryRoot(registryName, reg)
+			root, err := registryRootNoSync(registryName, reg)
 			if err != nil {
 				return SearchResult{}, false, err
 			}
-			index, err := LoadIndex(root)
+			indexed, found, err := ResolveIndexedSkill(root, identity)
 			if err != nil {
-				return SearchResult{}, false, err
-			}
-			for _, indexed := range index.Skills {
-				if indexed.Identity == identity || indexed.Name == identity {
-					return SearchResult{Registry: registryName, Skill: indexed}, true, nil
+				if os.IsNotExist(err) {
+					return SearchResult{}, false, nil
 				}
+				return SearchResult{}, false, err
 			}
-			return SearchResult{}, false, nil
+			return SearchResult{Registry: registryName, Skill: indexed}, found, nil
 		}
 	}
 	for name, reg := range cfg.Registries {
-		root, _, err := registryRoot(name, reg)
+		root, err := registryRootNoSync(name, reg)
 		if err != nil {
 			return SearchResult{}, false, err
 		}
@@ -112,32 +139,74 @@ func ValidateIndex(name string, reg config.Registry) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	seen := map[string]bool{}
-	for _, indexed := range index.Skills {
-		if indexed.Identity == "" {
-			return 0, fmt.Errorf("index contains skill with empty identity")
-		}
-		if seen[indexed.Identity] {
-			return 0, fmt.Errorf("duplicate identity %s", indexed.Identity)
-		}
-		seen[indexed.Identity] = true
-		sourcePath := filepath.Join(root, filepath.FromSlash(indexed.SourcePath))
-		meta, err := skill.LoadCompatibleMetadata(sourcePath, name)
-		if err != nil {
-			return 0, fmt.Errorf("validate %s: %w", indexed.Identity, err)
-		}
-		if skill.Identity(meta.Namespace, meta.Name) != indexed.Identity {
-			return 0, fmt.Errorf("identity mismatch for %s", indexed.Identity)
-		}
-		checksum, err := skill.ChecksumDir(sourcePath)
-		if err != nil {
-			return 0, err
-		}
-		if checksum != indexed.Checksum {
-			return 0, fmt.Errorf("checksum mismatch for %s", indexed.Identity)
-		}
+	if err := validateRegistrySources(root, name, index); err != nil {
+		return 0, err
 	}
 	return len(index.Skills), nil
+}
+
+func validateRegistrySources(root string, name string, index Index) error {
+	seen := map[string]bool{}
+	for _, indexed := range index.Skills {
+		if indexed.Source.Type != SourceTypeRegistry {
+			continue
+		}
+		if seen[indexed.Identity] {
+			continue
+		}
+		seen[indexed.Identity] = true
+		sourcePath, err := RegistrySourcePath(root, indexed.Source.Path)
+		if err != nil {
+			return fmt.Errorf("validate %s: %w", indexed.Identity, err)
+		}
+		meta, err := skill.LoadCompatibleMetadata(sourcePath, name)
+		if err != nil {
+			return fmt.Errorf("validate %s: %w", indexed.Identity, err)
+		}
+		if skill.Identity(meta.Namespace, meta.Name) != indexed.Identity {
+			return fmt.Errorf("identity mismatch for %s", indexed.Identity)
+		}
+		if indexed.Checksum != "" {
+			checksum, err := skill.ChecksumDir(sourcePath)
+			if err != nil {
+				return err
+			}
+			if checksum != indexed.Checksum {
+				return fmt.Errorf("checksum mismatch for %s", indexed.Identity)
+			}
+		}
+	}
+	return nil
+}
+
+func RegistrySourcePath(root string, sourcePath string) (string, error) {
+	if filepath.IsAbs(sourcePath) {
+		return "", fmt.Errorf("source path %q must be relative", sourcePath)
+	}
+	if strings.Contains(sourcePath, "\\") {
+		return "", fmt.Errorf("source path %q must use slash separators", sourcePath)
+	}
+	for _, part := range strings.Split(sourcePath, "/") {
+		if part == ".." {
+			return "", fmt.Errorf("source path %q escapes registry root", sourcePath)
+		}
+	}
+	cleanRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	target, err := filepath.Abs(filepath.Join(cleanRoot, filepath.FromSlash(sourcePath)))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(cleanRoot, target)
+	if err != nil {
+		return "", err
+	}
+	if rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("source path %q escapes registry root", sourcePath)
+	}
+	return target, nil
 }
 
 func matches(indexed IndexSkill, query string) bool {
@@ -149,6 +218,13 @@ func matches(indexed IndexSkill, query string) bool {
 		indexed.Description,
 		strings.Join(indexed.Targets, " "),
 		strings.Join(indexed.Tags, " "),
+		indexed.Source.Type,
+		indexed.Source.URL,
+		indexed.Source.Path,
+		indexed.Source.Ref,
+		strings.Join(indexed.Maintainers, " "),
+		indexed.License,
+		indexed.Trust.Level,
 	}
 	for _, field := range fields {
 		if strings.Contains(strings.ToLower(field), query) {
@@ -159,19 +235,34 @@ func matches(indexed IndexSkill, query string) bool {
 }
 
 func ResolveIndexedPath(root string, spec string) (string, bool, error) {
+	indexed, ok, err := ResolveIndexedSkill(root, spec)
+	if err != nil || !ok {
+		return "", ok, err
+	}
+	if indexed.Source.Type != SourceTypeRegistry {
+		return "", false, nil
+	}
+	sourcePath, err := RegistrySourcePath(root, indexed.Source.Path)
+	if err != nil {
+		return "", false, err
+	}
+	return sourcePath, true, nil
+}
+
+func ResolveIndexedSkill(root string, spec string) (IndexSkill, bool, error) {
 	index, err := LoadIndex(root)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", false, nil
+			return IndexSkill{}, false, nil
 		}
-		return "", false, err
+		return IndexSkill{}, false, err
 	}
 	for _, indexed := range index.Skills {
 		if indexed.Identity == spec || indexed.Name == spec {
-			return filepath.Join(root, filepath.FromSlash(indexed.SourcePath)), true, nil
+			return indexed, true, nil
 		}
 	}
-	return "", false, nil
+	return IndexSkill{}, false, nil
 }
 
 func LoadIndex(root string) (Index, error) {
@@ -183,11 +274,14 @@ func LoadIndex(root string) (Index, error) {
 	if err := json.Unmarshal(data, &index); err != nil {
 		return Index{}, err
 	}
+	if err := validateCatalogSchema(index); err != nil {
+		return Index{}, err
+	}
 	return index, nil
 }
 
 func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
-	root, sourceType, err := registryRoot(name, reg)
+	root, _, err := registryRoot(name, reg)
 	if err != nil {
 		return Index{}, "", err
 	}
@@ -195,9 +289,11 @@ func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
 	if err != nil {
 		return Index{}, "", err
 	}
+	now := time.Now().UTC().Format(time.RFC3339)
 	index := Index{
-		Registry:    name,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		SchemaVersion: IndexSchemaVersion,
+		Registry:      name,
+		GeneratedAt:   now,
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -220,10 +316,19 @@ func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
 			Description: meta.Description,
 			Targets:     meta.Targets,
 			Tags:        meta.Tags,
-			SourceType:  sourceType,
-			SourcePath:  filepath.ToSlash(entry.Name()),
+			Source:      IndexSource{Type: SourceTypeRegistry, Path: filepath.ToSlash(entry.Name())},
+			Maintainers: maintainersFrom(meta),
+			Trust:       IndexTrust{Level: TrustPrivate},
+			Featured:    false,
+			UpdatedAt:   now,
 			Checksum:    checksum,
 		})
+	}
+	if err := validateCatalogSchema(index); err != nil {
+		return Index{}, "", err
+	}
+	if err := validateRegistrySources(root, name, index); err != nil {
+		return Index{}, "", err
 	}
 	indexPath := filepath.Join(root, IndexFileName)
 	data, err := json.MarshalIndent(index, "", "  ")
@@ -235,6 +340,197 @@ func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
 		return Index{}, "", err
 	}
 	return index, indexPath, nil
+}
+
+func maintainersFrom(meta skill.Metadata) []string {
+	if meta.Author == "" {
+		return nil
+	}
+	return []string{meta.Author}
+}
+
+func validateCatalogSchema(index Index) error {
+	if index.SchemaVersion != IndexSchemaVersion {
+		return fmt.Errorf("unsupported index schema %q, expected %q", index.SchemaVersion, IndexSchemaVersion)
+	}
+	if index.Registry == "" {
+		return fmt.Errorf("index missing registry")
+	}
+	if index.GeneratedAt == "" {
+		return fmt.Errorf("index missing generated_at")
+	}
+	seen := map[string]bool{}
+	for _, indexed := range index.Skills {
+		if indexed.Identity == "" || indexed.Name == "" || indexed.Namespace == "" {
+			return fmt.Errorf("index contains skill with incomplete identity fields")
+		}
+		if indexed.Version == "" {
+			return fmt.Errorf("index %s missing version", indexed.Identity)
+		}
+		if indexed.Description == "" {
+			return fmt.Errorf("index %s missing description", indexed.Identity)
+		}
+		if len(indexed.Targets) == 0 {
+			return fmt.Errorf("index %s missing targets", indexed.Identity)
+		}
+		if indexed.Source.Type == "" || indexed.Source.Path == "" {
+			return fmt.Errorf("index %s missing source", indexed.Identity)
+		}
+		if !validSourceType(indexed.Source.Type) {
+			return fmt.Errorf("index %s unsupported source type %q", indexed.Identity, indexed.Source.Type)
+		}
+		if indexed.Source.Type == SourceTypeGit && indexed.Source.URL == "" {
+			return fmt.Errorf("index %s git source missing url", indexed.Identity)
+		}
+		if indexed.Trust.Level == "" {
+			return fmt.Errorf("index %s missing trust level", indexed.Identity)
+		}
+		if !validTrustLevel(indexed.Trust.Level) {
+			return fmt.Errorf("index %s unsupported trust level %q", indexed.Identity, indexed.Trust.Level)
+		}
+		if indexed.UpdatedAt == "" {
+			return fmt.Errorf("index %s missing updated_at", indexed.Identity)
+		}
+		if seen[indexed.Identity] {
+			return fmt.Errorf("duplicate identity %s", indexed.Identity)
+		}
+		seen[indexed.Identity] = true
+	}
+	return nil
+}
+
+func validSourceType(sourceType string) bool {
+	switch sourceType {
+	case SourceTypeRegistry, SourceTypeGit:
+		return true
+	default:
+		return false
+	}
+}
+
+func validTrustLevel(level string) bool {
+	switch level {
+	case TrustOfficial, TrustCurated, TrustCommunity, TrustPrivate, TrustUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+type RegistryStatus struct {
+	Name        string
+	Type        string
+	Location    string
+	CachePath   string
+	SkillCount  int
+	GeneratedAt string
+}
+
+func ListRegistries(cfg config.Config) []RegistryStatus {
+	names := make([]string, 0, len(cfg.Registries))
+	for name := range cfg.Registries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	statuses := make([]RegistryStatus, 0, len(names))
+	for _, name := range names {
+		reg := cfg.Registries[name]
+		status := RegistryStatus{Name: name, Type: reg.Type}
+		switch reg.Type {
+		case "local":
+			status.Location = reg.Path
+			status.CachePath = reg.Path
+		case "git":
+			status.Location = reg.URL
+			if cachePath, err := GitCachePath(name); err == nil {
+				status.CachePath = cachePath
+			}
+		}
+		if root, err := registryRootNoSync(name, reg); err == nil {
+			if index, err := LoadIndex(root); err == nil {
+				status.SkillCount = len(index.Skills)
+				status.GeneratedAt = index.GeneratedAt
+			}
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses
+}
+
+type CatalogFilter struct {
+	Registry string
+	Target   string
+	Tag      string
+	Featured *bool
+}
+
+func ListCatalog(cfg config.Config, filter CatalogFilter) ([]SearchResult, error) {
+	var results []SearchResult
+	for name, reg := range cfg.Registries {
+		if filter.Registry != "" && filter.Registry != name {
+			continue
+		}
+		root, err := registryRootNoSync(name, reg)
+		if err != nil {
+			return nil, err
+		}
+		index, err := LoadIndex(root)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		for _, indexed := range index.Skills {
+			if filter.Featured != nil && indexed.Featured != *filter.Featured {
+				continue
+			}
+			if filter.Target != "" && !contains(indexed.Targets, filter.Target) {
+				continue
+			}
+			if filter.Tag != "" && !contains(indexed.Tags, filter.Tag) {
+				continue
+			}
+			results = append(results, SearchResult{Registry: name, Skill: indexed})
+		}
+	}
+	return results, nil
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func SyncRegistry(name string, reg config.Registry) (int, error) {
+	root, _, err := registryRoot(name, reg)
+	if err != nil {
+		return 0, err
+	}
+	index, err := LoadIndex(root)
+	if err != nil {
+		return 0, err
+	}
+	if err := validateRegistrySources(root, name, index); err != nil {
+		return 0, err
+	}
+	return len(index.Skills), nil
+}
+
+func registryRootNoSync(name string, reg config.Registry) (string, error) {
+	switch reg.Type {
+	case "local":
+		return reg.Path, nil
+	case "git":
+		return GitCachePath(name)
+	default:
+		return "", fmt.Errorf("unsupported registry type %q", reg.Type)
+	}
 }
 
 func registryRoot(name string, reg config.Registry) (string, string, error) {
