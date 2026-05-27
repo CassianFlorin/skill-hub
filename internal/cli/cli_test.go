@@ -1202,6 +1202,33 @@ func TestCatalogListSupportsNamespaceAndTrustFilters(t *testing.T) {
 	assertNotContains(t, stdout.String(), "community/aaa-helper")
 }
 
+func TestCatalogExportWritesStaticCatalogFiles(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	outputDir := filepath.Join(workspace, "site")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	writeDiscoveryIndex(t, registryDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "export", "--registry", "company", "--namespace", "official", "--output", outputDir)
+
+	assertContains(t, stdout.String(), "exported 2 catalog skills")
+	assertFileContains(t, filepath.Join(outputDir, "catalog.json"), `"generated_by": "skillhub"`)
+	assertFileContains(t, filepath.Join(outputDir, "catalog.json"), `"install_command": "skillhub install company/official/git-commit-cn"`)
+	assertFileContains(t, filepath.Join(outputDir, "catalog.json"), `"name": "codex"`)
+	assertFileContains(t, filepath.Join(outputDir, "index.html"), "<title>skill-hub catalog</title>")
+	assertFileContains(t, filepath.Join(outputDir, "index.html"), "company/official/git-commit-cn")
+	assertFileContains(t, filepath.Join(outputDir, "index.html"), "skillhub install company/official/repo-code-review")
+	assertFileNotContains(t, filepath.Join(outputDir, "index.html"), "community/aaa-helper")
+}
+
 func TestSearchJSONAndRankingPreferNameTagFeaturedOfficial(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")

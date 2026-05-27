@@ -26,6 +26,7 @@ skillhub catalog namespaces --registry hub
 skillhub catalog trust --registry hub
 skillhub catalog list --registry hub --namespace official --trust official
 skillhub catalog list --registry hub --json
+skillhub catalog export --registry hub --output ./public/catalog
 skillhub search java
 skillhub search git --json
 skillhub info company/platform-team/java-review
@@ -60,6 +61,7 @@ skillhub catalog targets --registry hub
 skillhub catalog namespaces --registry hub
 skillhub catalog trust --registry hub
 skillhub catalog list --registry hub --namespace official --trust official
+skillhub catalog export --registry hub --output ./public/catalog
 skillhub search git
 skillhub info hub/official/git-commit-cn
 ```
@@ -75,6 +77,13 @@ skillhub catalog tags --registry hub --json
 skillhub catalog targets --registry hub --json
 skillhub search git --json
 skillhub info hub/official/git-commit-cn --json
+```
+
+Static catalog export writes a browsable `index.html` and structured `catalog.json` for publishing or reviewing a marketplace snapshot:
+
+```bash
+skillhub catalog export --registry hub --output ./public/catalog
+skillhub catalog export --registry hub --target codex --namespace official --output ./public/codex
 ```
 
 Registries use `skillhub.index.json` schema v2. Old index files without `schema_version: "2"` are rejected by validation.
@@ -234,6 +243,7 @@ Registry index example:
 ./skillhub catalog targets --registry company
 ./skillhub catalog namespaces --registry company
 ./skillhub catalog trust --registry company
+./skillhub catalog export --registry company --output ./public/catalog
 ./skillhub search java
 ./skillhub info company/platform-team/java-review
 ./skillhub install company/platform-team/java-review
