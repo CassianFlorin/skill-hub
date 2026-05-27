@@ -326,6 +326,37 @@ entry: SKILL.md
 	assertFileContains(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Local Skill")
 }
 
+func TestDeployClaudeCopiesInstalledSkill(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	claudeDir := filepath.Join(workspace, "claude-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - claude
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "claude", "local/my-skill")
+
+	assertContains(t, stdout.String(), "deployed local/my-skill to claude")
+	assertFileContains(t, filepath.Join(claudeDir, "local__my-skill", "SKILL.md"), "# Local Skill")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"claude"`)
+}
+
 func writeGitSkill(t *testing.T, root string, name string, version string, description string) {
 	t.Helper()
 	skillDir := filepath.Join(root, name)

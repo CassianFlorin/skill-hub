@@ -20,6 +20,17 @@ func CodexDir() (string, error) {
 	return filepath.Join(home, ".codex", "skills"), nil
 }
 
+func ClaudeDir() (string, error) {
+	if dir := os.Getenv("SKILLHUB_CLAUDE_DIR"); dir != "" {
+		return filepath.Abs(dir)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".claude", "skills"), nil
+}
+
 type Options struct {
 	Identity string
 	DryRun   bool
@@ -32,11 +43,23 @@ type Result struct {
 }
 
 func DeployCodex(options Options) ([]Result, error) {
-	lock, err := install.LoadLock()
+	targetRoot, err := CodexDir()
 	if err != nil {
 		return nil, err
 	}
-	targetRoot, err := CodexDir()
+	return deployRuntime("codex", targetRoot, options)
+}
+
+func DeployClaude(options Options) ([]Result, error) {
+	targetRoot, err := ClaudeDir()
+	if err != nil {
+		return nil, err
+	}
+	return deployRuntime("claude", targetRoot, options)
+}
+
+func deployRuntime(runtime string, targetRoot string, options Options) ([]Result, error) {
+	lock, err := install.LoadLock()
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +82,7 @@ func DeployCodex(options Options) ([]Result, error) {
 		if err := copyDir(locked.InstalledPath, target); err != nil {
 			return nil, fmt.Errorf("deploy %s: %w", identity, err)
 		}
-		lock.Skills[i].DeployedTo = appendRuntime(lock.Skills[i].DeployedTo, "codex")
+		lock.Skills[i].DeployedTo = appendRuntime(lock.Skills[i].DeployedTo, runtime)
 		deployed = append(deployed, Result{Identity: identity})
 	}
 	if options.Identity != "" && len(deployed) == 0 {

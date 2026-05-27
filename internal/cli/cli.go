@@ -150,9 +150,10 @@ func runUpdate(stdout io.Writer) error {
 }
 
 func runDeploy(args []string, stdout io.Writer) error {
-	if len(args) < 1 || args[0] != "codex" {
-		return fmt.Errorf("usage: skillhub deploy codex [identity] [--dry-run] [--force]")
+	if len(args) < 1 {
+		return fmt.Errorf("usage: skillhub deploy <codex|claude> [identity] [--dry-run] [--force]")
 	}
+	runtime := args[0]
 	options := deploy.Options{}
 	for _, arg := range args[1:] {
 		switch arg {
@@ -167,16 +168,25 @@ func runDeploy(args []string, stdout io.Writer) error {
 			options.Identity = arg
 		}
 	}
-	deployed, err := deploy.DeployCodex(options)
+	var deployed []deploy.Result
+	var err error
+	switch runtime {
+	case "codex":
+		deployed, err = deploy.DeployCodex(options)
+	case "claude":
+		deployed, err = deploy.DeployClaude(options)
+	default:
+		return fmt.Errorf("usage: skillhub deploy <codex|claude> [identity] [--dry-run] [--force]")
+	}
 	if err != nil {
 		return err
 	}
 	for _, result := range deployed {
 		if result.DryRun {
-			_, _ = fmt.Fprintf(stdout, "would deploy %s to codex\n", result.Identity)
+			_, _ = fmt.Fprintf(stdout, "would deploy %s to %s\n", result.Identity, runtime)
 			continue
 		}
-		_, _ = fmt.Fprintf(stdout, "deployed %s to codex\n", result.Identity)
+		_, _ = fmt.Fprintf(stdout, "deployed %s to %s\n", result.Identity, runtime)
 	}
 	return nil
 }
