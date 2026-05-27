@@ -262,6 +262,109 @@ entry: SKILL.md
 	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "# Java Review")
 }
 
+func TestSearchFindsSkillsFromRegistryIndexes(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+description: Java review skill
+entry: SKILL.md
+tags:
+  - java
+  - review
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "generate", "company")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "search", "review")
+
+	assertContains(t, stdout.String(), "company\tplatform/java-review\t1.2.0\tJava review skill")
+}
+
+func TestInfoShowsRegistryIndexSkillDetails(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+description: Java review skill
+entry: SKILL.md
+targets:
+  - codex
+  - claude
+tags:
+  - java
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "generate", "company")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "info", "company/platform/java-review")
+
+	assertContains(t, stdout.String(), "identity: platform/java-review")
+	assertContains(t, stdout.String(), "registry: company")
+	assertContains(t, stdout.String(), "version: 1.2.0")
+	assertContains(t, stdout.String(), "targets: codex, claude")
+	assertContains(t, stdout.String(), "tags: java")
+	assertContains(t, stdout.String(), "checksum: sha256:")
+}
+
+func TestRegistryIndexValidateDetectsChecksumDrift(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "generate", "company")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "index", "validate", "company")
+	assertContains(t, stdout.String(), "validated company with 1 skills")
+
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nchanged\n")
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "index", "validate", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected checksum validation failure")
+	}
+	assertContains(t, err.Error(), "checksum mismatch for platform/java-review")
+}
+
 func TestDeployCodexDryRunDoesNotWriteFiles(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/cassian/skill-hub/internal/config"
 	"github.com/cassian/skill-hub/internal/deploy"
@@ -20,6 +21,10 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return runInit(stdout, workDir)
 	case "registry":
 		return runRegistry(args[1:], stdout, workDir)
+	case "search":
+		return runSearch(args[1:], stdout, workDir)
+	case "info":
+		return runInfo(args[1:], stdout, workDir)
 	case "install":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: skillhub install <path|registry/skill>")
@@ -99,10 +104,10 @@ func runRegistryAdd(args []string, stdout io.Writer, workDir string) error {
 }
 
 func runRegistryIndex(args []string, stdout io.Writer, workDir string) error {
-	if len(args) != 2 || args[0] != "generate" {
-		return fmt.Errorf("usage: skillhub registry index generate <registry>")
+	if len(args) != 2 {
+		return fmt.Errorf("usage: skillhub registry index <generate|validate> <registry>")
 	}
-	name := args[1]
+	action, name := args[0], args[1]
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
@@ -111,11 +116,74 @@ func runRegistryIndex(args []string, stdout io.Writer, workDir string) error {
 	if !ok {
 		return fmt.Errorf("unknown registry %q", name)
 	}
-	index, _, err := registry.GenerateIndex(name, reg)
+	switch action {
+	case "generate":
+		index, _, err := registry.GenerateIndex(name, reg)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "indexed %s with %d skills\n", name, len(index.Skills))
+	case "validate":
+		count, err := registry.ValidateIndex(name, reg)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "validated %s with %d skills\n", name, count)
+	default:
+		return fmt.Errorf("usage: skillhub registry index <generate|validate> <registry>")
+	}
+	return nil
+}
+
+func runSearch(args []string, stdout io.Writer, workDir string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillhub search <query>")
+	}
+	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "indexed %s with %d skills\n", name, len(index.Skills))
+	results, err := registry.SearchIndexes(cfg, args[0])
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		_, _ = fmt.Fprintln(stdout, "no skills found")
+		return nil
+	}
+	for _, result := range results {
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", result.Registry, result.Skill.Identity, result.Skill.Version, result.Skill.Description)
+	}
+	return nil
+}
+
+func runInfo(args []string, stdout io.Writer, workDir string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillhub info <registry/identity|identity>")
+	}
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	result, ok, err := registry.FindIndexedSkill(cfg, args[0])
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("skill %q not found", args[0])
+	}
+	indexed := result.Skill
+	_, _ = fmt.Fprintf(stdout, "identity: %s\n", indexed.Identity)
+	_, _ = fmt.Fprintf(stdout, "registry: %s\n", result.Registry)
+	_, _ = fmt.Fprintf(stdout, "name: %s\n", indexed.Name)
+	_, _ = fmt.Fprintf(stdout, "namespace: %s\n", indexed.Namespace)
+	_, _ = fmt.Fprintf(stdout, "version: %s\n", indexed.Version)
+	_, _ = fmt.Fprintf(stdout, "description: %s\n", indexed.Description)
+	_, _ = fmt.Fprintf(stdout, "targets: %s\n", strings.Join(indexed.Targets, ", "))
+	_, _ = fmt.Fprintf(stdout, "tags: %s\n", strings.Join(indexed.Tags, ", "))
+	_, _ = fmt.Fprintf(stdout, "source_type: %s\n", indexed.SourceType)
+	_, _ = fmt.Fprintf(stdout, "source_path: %s\n", indexed.SourcePath)
+	_, _ = fmt.Fprintf(stdout, "checksum: %s\n", indexed.Checksum)
 	return nil
 }
 
@@ -192,6 +260,6 @@ func runDeploy(args []string, stdout io.Writer) error {
 }
 
 func usage(stderr io.Writer) error {
-	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|install|list|update|deploy>")
+	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|search|info|install|list|update|deploy>")
 	return fmt.Errorf("invalid command")
 }

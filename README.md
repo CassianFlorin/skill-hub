@@ -10,6 +10,10 @@ Implemented commands:
 skillhub init
 skillhub registry add local company ./examples/local-registry
 skillhub registry add git company git@gitlab.example.com:ai/skills.git
+skillhub registry index generate company
+skillhub registry index validate company
+skillhub search java
+skillhub info company/platform-team/java-review
 skillhub install company/java-review
 skillhub install ./examples/local-registry/java-review
 skillhub list
@@ -101,6 +105,9 @@ Registry index example:
 
 ```bash
 ./skillhub registry index generate company
+./skillhub registry index validate company
+./skillhub search java
+./skillhub info company/platform-team/java-review
 ./skillhub install company/platform-team/java-review
 ```
 
