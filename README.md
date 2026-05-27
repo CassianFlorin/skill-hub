@@ -1,151 +1,229 @@
 # skill-hub
 
-`skill-hub` is a Skill package manager for AI agents. It treats a Skill as an installable package with metadata, installed files, lockfile state, registry indexing, and runtime deploy targets.
+`skill-hub` is a Skill package manager for AI agents. It treats a Skill as an installable package with metadata, registry indexing, lockfile state, rollback history, and runtime deploy targets.
 
-## Current scope
+Current release line: `v1.3.x`.
 
-Implemented commands:
+## What It Does
+
+- Discovers Skills from local or git-backed registries.
+- Installs Skills into a managed local store under `$SKILLHUB_HOME`.
+- Keeps installed state in `skillhub.lock`, including versions, checksums, source refs, and deployed runtimes.
+- Supports pinned installs from metadata versions, git tags, branches, or commits.
+- Deploys installed Skills to Codex, Claude, and Gemini runtime directories.
+- Exports a static catalog snapshot as `index.html` and `catalog.json`.
+- Validates registry indexes before sync or publication.
+
+## Quick Start
+
+Build the CLI:
+
+```bash
+go build -o skillhub ./cmd/skillhub
+```
+
+Initialize a project. This adds the default `hub` registry pointing at `https://github.com/CassianFlorin/skill-hub-registry.git`.
+
+```bash
+./skillhub init
+./skillhub registry sync hub
+```
+
+Discover and inspect Skills:
+
+```bash
+./skillhub catalog featured --registry hub
+./skillhub catalog list --registry hub --target codex
+./skillhub search git
+./skillhub info hub/official/git-commit-cn
+```
+
+Install and deploy:
+
+```bash
+./skillhub install hub/official/git-commit-cn
+./skillhub deploy codex official/git-commit-cn --force
+./skillhub deploy status
+```
+
+## Command Overview
 
 ```bash
 skillhub version
 skillhub doctor
 skillhub init
+
 skillhub registry add local company ./examples/local-registry
-skillhub registry add git company git@gitlab.example.com:ai/skills.git
+skillhub registry add git team git@github.com:your-org/skills.git
 skillhub registry list
 skillhub registry sync hub
 skillhub registry sync --all
 skillhub registry index generate company
 skillhub registry index validate company
-skillhub catalog list
-skillhub catalog featured
-skillhub catalog list --target codex --tag java
+
+skillhub catalog list --registry hub
+skillhub catalog featured --registry hub
 skillhub catalog tags --registry hub
 skillhub catalog targets --registry hub
 skillhub catalog namespaces --registry hub
 skillhub catalog trust --registry hub
-skillhub catalog list --registry hub --namespace official --trust official
-skillhub catalog list --registry hub --json
 skillhub catalog export --registry hub --output ./public/catalog
+
 skillhub search java
-skillhub search git --json
-skillhub info company/platform-team/java-review
-skillhub info company/platform-team/java-review --json
-skillhub install company/java-review
-skillhub install company/java-review@1.2.0
-skillhub install ./examples/local-registry/java-review
-skillhub rollback platform-team/java-review
-skillhub uninstall platform-team/java-review
+skillhub info hub/official/git-commit-cn
+skillhub install hub/official/git-commit-cn
+skillhub install hub/official/git-commit-cn@v0.1.0
 skillhub list
 skillhub update
+skillhub rollback official/git-commit-cn
+skillhub uninstall official/git-commit-cn
+
 skillhub deploy codex
 skillhub deploy claude
 skillhub deploy gemini
 skillhub deploy status
 ```
 
-The CLI supports local registry installation, git registry installation, and catalog discovery. Git registries are cloned into a local cache during explicit sync or install, and refreshed with `git pull --ff-only`.
+## Catalog Discovery
 
-## Catalog discovery
-
-`skillhub init` configures the default `hub` registry at `https://github.com/CassianFlorin/skill-hub-registry.git`. Run `skillhub registry sync hub` to clone or refresh it locally, then use `skillhub catalog featured`, `skillhub catalog list`, `skillhub search <query>`, and `skillhub info <registry>/<identity>` to discover installable skills.
-
-Discovery commands:
+`catalog` reads synced registry indexes and lists installable Skills. Use `registry sync` before discovery when the registry is new or stale.
 
 ```bash
-skillhub catalog featured --registry hub
-skillhub catalog list --registry hub --target codex
-skillhub catalog list --registry hub --target claude
-skillhub catalog list --registry hub --tag git
-skillhub catalog tags --registry hub
-skillhub catalog targets --registry hub
-skillhub catalog namespaces --registry hub
-skillhub catalog trust --registry hub
-skillhub catalog list --registry hub --namespace official --trust official
-skillhub catalog export --registry hub --output ./public/catalog
-skillhub search git
-skillhub info hub/official/git-commit-cn
+./skillhub registry sync hub
+./skillhub catalog list --registry hub
+./skillhub catalog featured --registry hub
+./skillhub catalog list --registry hub --target claude
+./skillhub catalog list --registry hub --namespace official --trust official
 ```
 
-`search` ranks stronger matches first: exact or prefix identity/name matches, then tag matches, then description matches, with featured and official skills preferred when the match strength is otherwise equal.
+Discovery facets:
+
+```bash
+./skillhub catalog tags --registry hub
+./skillhub catalog targets --registry hub
+./skillhub catalog namespaces --registry hub
+./skillhub catalog trust --registry hub
+```
+
+`search` ranks stronger matches first: exact or prefix identity/name matches, then tag matches, then description matches. Featured and official Skills are preferred when match strength is otherwise equal.
+
+```bash
+./skillhub search git
+./skillhub search runtime --json
+```
 
 For automation, catalog, search, and info commands support JSON output:
 
 ```bash
-skillhub catalog list --registry hub --json
-skillhub catalog featured --registry hub --json
-skillhub catalog tags --registry hub --json
-skillhub catalog targets --registry hub --json
-skillhub search git --json
-skillhub info hub/official/git-commit-cn --json
+./skillhub catalog list --registry hub --json
+./skillhub catalog featured --registry hub --json
+./skillhub catalog tags --registry hub --json
+./skillhub catalog targets --registry hub --json
+./skillhub info hub/official/git-commit-cn --json
 ```
 
-Static catalog export writes a browsable `index.html` and structured `catalog.json` for publishing or reviewing a marketplace snapshot:
+## Static Catalog Export
+
+`catalog export` writes a browsable `index.html` and structured `catalog.json` for publishing or reviewing a marketplace snapshot.
 
 ```bash
-skillhub catalog export --registry hub --output ./public/catalog
-skillhub catalog export --registry hub --target codex --namespace official --output ./public/codex
+./skillhub catalog export --registry hub --output ./public/catalog
+./skillhub catalog export --registry hub --target codex --namespace official --output ./public/codex
 ```
 
-Registries use `skillhub.index.json` schema v2. Old index files without `schema_version: "2"` are rejected by validation.
+The exported JSON includes:
 
-```json
-{
-  "schema_version": "2",
-  "registry": "hub",
-  "generated_at": "2026-05-27T00:00:00Z",
-  "skills": [
-    {
-      "identity": "official/java-review",
-      "name": "java-review",
-      "namespace": "official",
-      "version": "0.1.0",
-      "description": "Review Java service code with repo-aware checks.",
-      "targets": ["codex", "claude"],
-      "tags": ["java", "review"],
-      "source": {
-        "type": "git",
-        "url": "https://github.com/CassianFlorin/skills.git",
-        "path": "java-review",
-        "ref": "v0.1.0"
-      },
-      "maintainers": ["CassianFlorin"],
-      "license": "MIT",
-      "trust": {
-        "level": "official",
-        "reviewed_at": "2026-05-27"
-      },
-      "featured": true,
-      "updated_at": "2026-05-27"
-    }
-  ]
-}
+- Skills with registry name, metadata, and install command.
+- Aggregated tags.
+- Aggregated runtime targets.
+- Aggregated namespaces.
+- Aggregated trust levels.
+
+## Install, Update, And Rollback
+
+Install from a registry:
+
+```bash
+./skillhub install hub/official/git-commit-cn
 ```
 
-Skills are displayed as `namespace/name`, using this priority:
+Install a local Skill directory:
 
-1. `skill.yaml.namespace`
-2. `skill.yaml.author`
-3. registry name
-4. local user name
-5. `unknown`
+```bash
+./skillhub install ./examples/local-registry/java-review
+```
 
-Existing Skill directories that only contain `SKILL.md` can still be installed. skill-hub writes a generated `skill.yaml` into the installed copy so the lockfile and deploy pipeline can use the same metadata model.
+Pinned install examples:
 
-## State files
+```bash
+./skillhub install company/java-review@1.2.0
+./skillhub install team/java-review@v1.2.0
+./skillhub install team/java-review@main
+./skillhub install team/java-review@<commit-sha>
+```
 
-- Project config: `skillhub.yaml`
-- Runtime home: `$SKILLHUB_HOME`, defaulting to `~/.skillhub`
-- Git registry cache: `$SKILLHUB_HOME/cache/registries/<registry-name>`
-- Installed skills: `$SKILLHUB_HOME/installed/<skill-name>`
-- Lockfile: `$SKILLHUB_HOME/skillhub.lock`
-- Codex deploy target: `$SKILLHUB_CODEX_DIR`, defaulting to `~/.codex/skills`
-- Claude deploy target: `$SKILLHUB_CLAUDE_DIR`, defaulting to `~/.claude/skills`
-- Gemini deploy target: `$SKILLHUB_GEMINI_DIR`, defaulting to `~/.gemini/skills`
+For local registries, the pinned value must match the Skill metadata version. For git registries, the pinned value is treated as a git ref and is recorded in `skillhub.lock` together with the resolved commit.
 
-`skillhub.yaml` and `skillhub.lock` are JSON documents with YAML-compatible filenames for this MVP. That keeps the first version dependency-free while preserving the intended file names.
+Update and rollback:
 
-## Skill structure
+```bash
+./skillhub update
+./skillhub rollback platform-team/java-review
+```
+
+For git registries, `skillhub update` refreshes the cached repository with `git pull --ff-only` and updates installed Skills when their `skill.yaml` version changes. Rollback restores the latest previous installed copy and updates `skillhub.lock`.
+
+Uninstall:
+
+```bash
+./skillhub uninstall platform-team/java-review
+./skillhub uninstall platform-team/java-review --deployed
+```
+
+By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, and Gemini runtime copies.
+
+## Runtime Deploy
+
+Supported runtime targets:
+
+| Runtime | Env var | Default directory |
+| --- | --- | --- |
+| Codex | `SKILLHUB_CODEX_DIR` | `~/.codex/skills` |
+| Claude | `SKILLHUB_CLAUDE_DIR` | `~/.claude/skills` |
+| Gemini | `SKILLHUB_GEMINI_DIR` | `~/.gemini/skills` |
+
+Deploy examples:
+
+```bash
+./skillhub deploy codex platform-team/java-review --dry-run
+./skillhub deploy codex platform-team/java-review --force
+./skillhub deploy claude platform-team/java-review --force
+./skillhub deploy gemini platform-team/java-review --force
+```
+
+Status:
+
+```bash
+./skillhub deploy status
+./skillhub deploy status codex
+./skillhub deploy status claude
+./skillhub deploy status gemini
+```
+
+Deploy respects installed Skill `targets` metadata. Skills with no targets are treated as compatible with all supported runtimes for backward compatibility. In batch deploys, unsupported Skills are skipped; explicitly deploying an unsupported Skill to a runtime returns an error.
+
+Without `--force`, deploy preflights all selected Skills before copying files. If any selected target already exists, the command fails before partial writes. Use `--force` to replace existing runtime copies.
+
+Deploy status values:
+
+- `deployed`: runtime copy matches the installed Skill checksum.
+- `missing`: the Skill supports the runtime but has not been deployed there.
+- `drifted`: runtime copy exists but differs from the installed Skill checksum.
+- `unsupported`: the Skill does not list that runtime in `targets`.
+
+## Skill Package Format
+
+Recommended structure:
 
 ```text
 java-review/
@@ -166,123 +244,110 @@ description: Java review skill
 entry: SKILL.md
 targets:
   - codex
+  - claude
   - gemini
 tags:
   - java
+  - review
+author: platform-team
 ```
 
-## Development
+Existing Skill directories that only contain `SKILL.md` can still be installed. skill-hub writes a generated `skill.yaml` into the installed copy so the lockfile and deploy pipeline can use the same metadata model.
+
+Installed Skill identities are displayed as `namespace/name`, using this priority:
+
+1. `skill.yaml.namespace`
+2. `skill.yaml.author`
+3. registry name
+4. local user name
+5. `unknown`
+
+## Registry Index Format
+
+Registries use `skillhub.index.json` schema v2. Old index files without `schema_version: "2"` are rejected by validation.
+
+```json
+{
+  "schema_version": "2",
+  "registry": "hub",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "official/java-review",
+      "name": "java-review",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "Review Java service code with repo-aware checks.",
+      "targets": ["codex", "claude", "gemini"],
+      "tags": ["java", "review"],
+      "source": {
+        "type": "git",
+        "url": "https://github.com/CassianFlorin/skills.git",
+        "path": "java-review",
+        "ref": "v0.1.0"
+      },
+      "maintainers": ["CassianFlorin"],
+      "license": "MIT",
+      "trust": {
+        "level": "official",
+        "reviewed_at": "2026-05-27",
+        "reviewer": "CassianFlorin"
+      },
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+```
+
+Validate a registry:
+
+```bash
+./skillhub registry index validate hub
+```
+
+Generate an index for a local registry:
+
+```bash
+./skillhub registry index generate company
+```
+
+## State Files
+
+- Project config: `skillhub.yaml`
+- Runtime home: `$SKILLHUB_HOME`, defaulting to `~/.skillhub`
+- Git registry cache: `$SKILLHUB_HOME/cache/registries/<registry-name>`
+- Installed Skills: `$SKILLHUB_HOME/installed/<safe-identity>`
+- Lockfile: `$SKILLHUB_HOME/skillhub.lock`
+- Runtime copies: configured by the runtime env vars listed above
+
+`skillhub.yaml` and `skillhub.lock` are JSON documents with YAML-compatible filenames. This keeps the CLI dependency-light while preserving the intended file names.
+
+## Local Development
+
+Run the test suite and build the CLI:
 
 ```bash
 go test ./...
 go build ./cmd/skillhub
 ```
 
-Example local run without touching real user state:
+Run without touching real user state:
 
 ```bash
 export SKILLHUB_HOME="$PWD/.skillhub-e2e/home"
 export SKILLHUB_CODEX_DIR="$PWD/.skillhub-e2e/codex"
 export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
 export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
+
 ./skillhub init
-./skillhub version
 ./skillhub doctor
 ./skillhub registry add local company "$PWD/examples/local-registry"
-./skillhub install company/java-review
-./skillhub list
-./skillhub deploy codex platform-team/java-review --dry-run
-./skillhub deploy codex platform-team/java-review --force
-./skillhub deploy status
-```
-
-Git registry example:
-
-```bash
-./skillhub registry add git team git@github.com:your-org/skills.git
-./skillhub registry sync team
-./skillhub catalog list --registry team
-./skillhub install team/java-review
-./skillhub update
-```
-
-For git registries, `skillhub update` refreshes the cached repository and updates installed skills when their `skill.yaml` version changes.
-
-Pinned install examples:
-
-```bash
-./skillhub install company/java-review@1.2.0
-./skillhub install team/java-review@v1.2.0
-./skillhub install team/java-review@main
-./skillhub install team/java-review@<commit-sha>
-```
-
-For local registries, the pinned value must match the Skill metadata version. For git registries, the pinned value is treated as a git ref and is recorded in `skillhub.lock` together with the resolved commit.
-
-Rollback example:
-
-```bash
-./skillhub rollback platform-team/java-review
-```
-
-skill-hub saves a history snapshot before replacing an installed Skill. Rollback restores the latest previous installed copy and updates `skillhub.lock`.
-
-Uninstall examples:
-
-```bash
-./skillhub uninstall platform-team/java-review
-./skillhub uninstall platform-team/java-review --deployed
-```
-
-By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, and Gemini runtime copies.
-
-Registry index example:
-
-```bash
-./skillhub registry index generate company
-./skillhub registry index validate company
-./skillhub registry list
+./skillhub registry sync company
 ./skillhub catalog list --registry company
-./skillhub catalog tags --registry company
-./skillhub catalog targets --registry company
-./skillhub catalog namespaces --registry company
-./skillhub catalog trust --registry company
-./skillhub catalog export --registry company --output ./public/catalog
-./skillhub search java
-./skillhub info company/platform-team/java-review
-./skillhub install company/platform-team/java-review
+./skillhub install company/java-review
+./skillhub deploy codex platform-team/java-review --dry-run
 ```
-
-Claude and Gemini deploy examples:
-
-```bash
-export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
-export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
-./skillhub deploy claude platform-team/java-review --force
-./skillhub deploy gemini platform-team/java-review --force
-./skillhub deploy status
-./skillhub deploy status codex
-./skillhub deploy status gemini
-```
-
-Deploy respects the installed Skill `targets` metadata. Skills with no targets are treated as compatible with all supported runtimes for backward compatibility. In batch deploys, unsupported skills are skipped; explicitly deploying an unsupported skill to a runtime returns an error.
-
-Dry-run mode performs the same selection and conflict checks without writing runtime directories or updating `skillhub.lock`:
-
-```bash
-./skillhub deploy codex --dry-run
-./skillhub deploy claude platform-team/java-review --dry-run
-./skillhub deploy gemini platform-team/java-review --dry-run
-```
-
-Without `--force`, deploy preflights all selected skills before copying files. If any selected target already exists, the command fails before partial writes. Use `--force` to replace existing runtime copies.
-
-Deploy status values:
-
-- `deployed`: runtime copy matches the installed skill checksum.
-- `missing`: the skill supports the runtime but has not been deployed there.
-- `drifted`: runtime copy exists but differs from the installed skill checksum.
-- `unsupported`: the skill does not list that runtime in `targets`.
 
 ## Release
 
@@ -291,6 +356,6 @@ CI runs `go test ./...` and `go build -v ./cmd/skillhub` on pushes and pull requ
 Tagged releases publish multi-platform archives through GitHub Actions:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag -a v1.3.0 -m "v1.3.0"
+git push origin v1.3.0
 ```
