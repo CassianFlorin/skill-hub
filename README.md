@@ -7,6 +7,8 @@
 Implemented commands:
 
 ```bash
+skillhub version
+skillhub doctor
 skillhub init
 skillhub registry add local company ./examples/local-registry
 skillhub registry add git company git@gitlab.example.com:ai/skills.git
@@ -165,6 +167,8 @@ export SKILLHUB_HOME="$PWD/.skillhub-e2e/home"
 export SKILLHUB_CODEX_DIR="$PWD/.skillhub-e2e/codex"
 export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
 ./skillhub init
+./skillhub version
+./skillhub doctor
 ./skillhub registry add local company "$PWD/examples/local-registry"
 ./skillhub install company/java-review
 ./skillhub list

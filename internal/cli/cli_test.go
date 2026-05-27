@@ -99,6 +99,37 @@ targets:
 	assertFileContains(t, filepath.Join(home, "installed", "local__my-skill", "skill.yaml"), "Local test skill")
 }
 
+func TestVersionPrintsBuildVersion(t *testing.T) {
+	workspace := t.TempDir()
+	var stdout bytes.Buffer
+
+	runOK(t, workspace, &stdout, "version")
+
+	assertContains(t, stdout.String(), "skillhub ")
+}
+
+func TestDoctorShowsProjectAndRuntimeReadiness(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex")
+	claudeDir := filepath.Join(workspace, "claude")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "doctor")
+
+	assertContains(t, stdout.String(), "config: ok")
+	assertContains(t, stdout.String(), "home: "+home)
+	assertContains(t, stdout.String(), "runtime codex: "+codexDir)
+	assertContains(t, stdout.String(), "runtime claude: "+claudeDir)
+	assertContains(t, stdout.String(), "registries: 1")
+}
+
 func TestInstallSkillOnlyDirectoryGeneratesMetadataAndNamespaceIdentity(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")

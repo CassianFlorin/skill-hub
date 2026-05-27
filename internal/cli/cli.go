@@ -15,11 +15,17 @@ import (
 	"github.com/cassian/skill-hub/internal/registry"
 )
 
+var Version = "dev"
+
 func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) error {
 	if len(args) == 0 {
 		return usage(stderr)
 	}
 	switch args[0] {
+	case "version":
+		return runVersion(stdout)
+	case "doctor":
+		return runDoctor(stdout, workDir)
 	case "init":
 		return runInit(stdout, workDir)
 	case "registry":
@@ -53,6 +59,43 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 	default:
 		return usage(stderr)
 	}
+}
+
+func runVersion(stdout io.Writer) error {
+	_, _ = fmt.Fprintf(stdout, "skillhub %s\n", Version)
+	return nil
+}
+
+func runDoctor(stdout io.Writer, workDir string) error {
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		return err
+	}
+	home, err := config.DefaultHome()
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(stdout, "config: ok")
+	_, _ = fmt.Fprintf(stdout, "config.path: %s\n", config.Path(workDir))
+	_, _ = fmt.Fprintf(stdout, "home: %s\n", home)
+	_, _ = fmt.Fprintf(stdout, "install_dir: %s\n", cfg.InstallDir)
+	for _, runtime := range deploy.SupportedRuntimes() {
+		dir, err := deploy.RuntimeDir(runtime.Name)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "runtime %s: %s\n", runtime.Name, dir)
+	}
+	_, _ = fmt.Fprintf(stdout, "registries: %d\n", len(cfg.Registries))
+	for _, status := range registry.ListRegistries(cfg) {
+		_, _ = fmt.Fprintf(stdout, "registry %s: %s %s skills=%d generated_at=%s\n", status.Name, status.Type, status.Location, status.SkillCount, status.GeneratedAt)
+	}
+	lock, err := install.LoadLock()
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "installed: %d\n", len(lock.Skills))
+	return nil
 }
 
 func runUninstall(args []string, stdout io.Writer) error {
@@ -619,6 +662,6 @@ func runDeployStatus(args []string, stdout io.Writer) error {
 }
 
 func usage(stderr io.Writer) error {
-	_, _ = fmt.Fprintln(stderr, "usage: skillhub <init|registry|catalog|search|info|install|rollback|uninstall|list|update|deploy>")
+	_, _ = fmt.Fprintln(stderr, "usage: skillhub <version|doctor|init|registry|catalog|search|info|install|rollback|uninstall|list|update|deploy>")
 	return fmt.Errorf("invalid command")
 }
