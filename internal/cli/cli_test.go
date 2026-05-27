@@ -1349,6 +1349,239 @@ targets:
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"claude"`)
 }
 
+func TestDeployRejectsExplicitUnsupportedRuntimeTarget(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "claude-only")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: claude-only
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - claude
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Claude Only\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"deploy", "codex", "local/claude-only"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected unsupported runtime target error")
+	}
+	assertContains(t, err.Error(), `local/claude-only does not support runtime "codex"`)
+	assertPathMissing(t, filepath.Join(codexDir, "local__claude-only"))
+}
+
+func TestDeployBatchSkipsUnsupportedRuntimeTargets(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	codexSkill := filepath.Join(workspace, "codex-skill")
+	claudeSkill := filepath.Join(workspace, "claude-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(codexSkill, "skill.yaml"), strings.TrimSpace(`
+name: codex-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(codexSkill, "SKILL.md"), "# Codex Skill\n")
+	mustWriteFile(t, filepath.Join(claudeSkill, "skill.yaml"), strings.TrimSpace(`
+name: claude-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - claude
+`)+"\n")
+	mustWriteFile(t, filepath.Join(claudeSkill, "SKILL.md"), "# Claude Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", codexSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", claudeSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex")
+
+	assertContains(t, stdout.String(), "deployed local/codex-skill to codex")
+	assertContains(t, stdout.String(), `skipped local/claude-skill to codex: unsupported`)
+	assertFileContains(t, filepath.Join(codexDir, "local__codex-skill", "SKILL.md"), "# Codex Skill")
+	assertPathMissing(t, filepath.Join(codexDir, "local__claude-skill"))
+}
+
+func TestDeployEmptyTargetsCanDeployToAnyRuntime(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	claudeDir := filepath.Join(workspace, "claude-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "legacy-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: legacy-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Legacy Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex", "local/legacy-skill")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "claude", "local/legacy-skill")
+
+	assertFileContains(t, filepath.Join(codexDir, "local__legacy-skill", "SKILL.md"), "# Legacy Skill")
+	assertFileContains(t, filepath.Join(claudeDir, "local__legacy-skill", "SKILL.md"), "# Legacy Skill")
+}
+
+func TestDeployBatchPreflightPreventsPartialWritesOnConflict(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	firstSkill := filepath.Join(workspace, "first-skill")
+	secondSkill := filepath.Join(workspace, "second-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(firstSkill, "skill.yaml"), strings.TrimSpace(`
+name: first-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(firstSkill, "SKILL.md"), "# First Skill\n")
+	mustWriteFile(t, filepath.Join(secondSkill, "skill.yaml"), strings.TrimSpace(`
+name: second-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(secondSkill, "SKILL.md"), "# Second Skill\n")
+	mustWriteFile(t, filepath.Join(codexDir, "local__second-skill", "SKILL.md"), "# Existing\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", firstSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", secondSkill)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"deploy", "codex"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected batch conflict")
+	}
+	assertContains(t, err.Error(), "target already exists")
+	assertPathMissing(t, filepath.Join(codexDir, "local__first-skill"))
+	assertFileContains(t, filepath.Join(codexDir, "local__second-skill", "SKILL.md"), "# Existing")
+}
+
+func TestDeployDryRunReportsConflictWithoutWrites(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+	mustWriteFile(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Existing\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex", "--dry-run")
+
+	assertContains(t, stdout.String(), "conflict local/my-skill to codex: target already exists")
+	assertFileContains(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Existing")
+	assertFileNotContains(t, filepath.Join(home, "skillhub.lock"), `"deployed_runtimes"`)
+}
+
+func TestDeployForceBatchOverwritesAllDeployableSkills(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	projectDir := filepath.Join(workspace, "project")
+	firstSkill := filepath.Join(workspace, "first-skill")
+	secondSkill := filepath.Join(workspace, "second-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+
+	mustWriteFile(t, filepath.Join(firstSkill, "skill.yaml"), strings.TrimSpace(`
+name: first-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(firstSkill, "SKILL.md"), "# First Skill\n")
+	mustWriteFile(t, filepath.Join(secondSkill, "skill.yaml"), strings.TrimSpace(`
+name: second-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - codex
+`)+"\n")
+	mustWriteFile(t, filepath.Join(secondSkill, "SKILL.md"), "# Second Skill\n")
+	mustWriteFile(t, filepath.Join(codexDir, "local__second-skill", "SKILL.md"), "# Existing\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", firstSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", secondSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "codex", "--force")
+
+	assertContains(t, stdout.String(), "deployed local/first-skill to codex")
+	assertContains(t, stdout.String(), "deployed local/second-skill to codex")
+	assertFileContains(t, filepath.Join(codexDir, "local__first-skill", "SKILL.md"), "# First Skill")
+	assertFileContains(t, filepath.Join(codexDir, "local__second-skill", "SKILL.md"), "# Second Skill")
+}
+
 func TestDeployStatusReportsRuntimeState(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")
@@ -1384,6 +1617,48 @@ entry: SKILL.md
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "status", "codex")
 	assertContains(t, stdout.String(), "local/my-skill\tcodex\tdrifted")
+}
+
+func TestDeployStatusReportsUnsupportedRuntimeTargets(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	codexDir := filepath.Join(workspace, "codex-skills")
+	claudeDir := filepath.Join(workspace, "claude-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "claude-only")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
+	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: claude-only
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - claude
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Claude Only\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "status", "codex")
+	assertContains(t, stdout.String(), "local/claude-only\tcodex\tunsupported")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "status")
+	assertContains(t, stdout.String(), "local/claude-only\tcodex\tunsupported")
+	assertContains(t, stdout.String(), "local/claude-only\tclaude\tmissing")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "claude", "local/claude-only")
+	mustWriteFile(t, filepath.Join(claudeDir, "local__claude-only", "SKILL.md"), "# Drifted\n")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "status", "claude")
+	assertContains(t, stdout.String(), "local/claude-only\tclaude\tdrifted")
 }
 
 func TestUninstallRemovesInstalledSkillButKeepsDeployedCopyByDefault(t *testing.T) {

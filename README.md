@@ -132,12 +132,14 @@ Example local run without touching real user state:
 ```bash
 export SKILLHUB_HOME="$PWD/.skillhub-e2e/home"
 export SKILLHUB_CODEX_DIR="$PWD/.skillhub-e2e/codex"
+export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
 ./skillhub init
 ./skillhub registry add local company "$PWD/examples/local-registry"
 ./skillhub install company/java-review
 ./skillhub list
 ./skillhub deploy codex platform-team/java-review --dry-run
 ./skillhub deploy codex platform-team/java-review --force
+./skillhub deploy status
 ```
 
 Git registry example:
@@ -200,6 +202,24 @@ export SKILLHUB_CLAUDE_DIR="$PWD/.skillhub-e2e/claude"
 ./skillhub deploy status
 ./skillhub deploy status codex
 ```
+
+Deploy respects the installed Skill `targets` metadata. Skills with no targets are treated as compatible with all supported runtimes for backward compatibility. In batch deploys, unsupported skills are skipped; explicitly deploying an unsupported skill to a runtime returns an error.
+
+Dry-run mode performs the same selection and conflict checks without writing runtime directories or updating `skillhub.lock`:
+
+```bash
+./skillhub deploy codex --dry-run
+./skillhub deploy claude platform-team/java-review --dry-run
+```
+
+Without `--force`, deploy preflights all selected skills before copying files. If any selected target already exists, the command fails before partial writes. Use `--force` to replace existing runtime copies.
+
+Deploy status values:
+
+- `deployed`: runtime copy matches the installed skill checksum.
+- `missing`: the skill supports the runtime but has not been deployed there.
+- `drifted`: runtime copy exists but differs from the installed skill checksum.
+- `unsupported`: the skill does not list that runtime in `targets`.
 
 ## Release
 

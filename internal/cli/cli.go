@@ -444,13 +444,28 @@ func runDeploy(args []string, stdout io.Writer) error {
 		return err
 	}
 	for _, result := range deployed {
-		if result.DryRun {
-			_, _ = fmt.Fprintf(stdout, "would deploy %s to %s\n", result.Identity, runtime)
-			continue
-		}
-		_, _ = fmt.Fprintf(stdout, "deployed %s to %s\n", result.Identity, runtime)
+		_, _ = fmt.Fprintln(stdout, deployResultLine(result, runtime))
 	}
 	return nil
+}
+
+func deployResultLine(result deploy.Result, runtime string) string {
+	if result.Runtime != "" {
+		runtime = result.Runtime
+	}
+	switch result.State {
+	case deploy.StateSkipped:
+		return fmt.Sprintf("skipped %s to %s: %s", result.Identity, runtime, result.Reason)
+	case deploy.StateConflict:
+		return fmt.Sprintf("conflict %s to %s: %s", result.Identity, runtime, result.Reason)
+	case deploy.StateWouldDeploy:
+		return fmt.Sprintf("would deploy %s to %s", result.Identity, runtime)
+	default:
+		if result.DryRun {
+			return fmt.Sprintf("would deploy %s to %s", result.Identity, runtime)
+		}
+		return fmt.Sprintf("deployed %s to %s", result.Identity, runtime)
+	}
 }
 
 func runDeployStatus(args []string, stdout io.Writer) error {
