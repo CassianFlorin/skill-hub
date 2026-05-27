@@ -414,6 +414,88 @@ func TestRegistryIndexValidateRejectsUnknownSourceAndTrust(t *testing.T) {
 	assertContains(t, err.Error(), `unsupported source type "bogus"`)
 }
 
+func TestRegistryIndexValidateRejectsUnsupportedTarget(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Java review skill",
+      "targets": ["codex", "unknown-runtime"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "java-review"},
+      "trust": {"level": "curated"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "index", "validate", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected unsupported target validation failure")
+	}
+	assertContains(t, err.Error(), `unsupported target "unknown-runtime"`)
+}
+
+func TestRegistryIndexValidateRequiresFeaturedSkillQualityFields(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Java review skill",
+      "targets": ["codex"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "java-review"},
+      "trust": {"level": "official"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"registry", "index", "validate", "company"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected featured quality validation failure")
+	}
+	assertContains(t, err.Error(), "featured skill platform/java-review missing tags")
+}
+
 func TestRegistryIndexGenerateRejectsMissingCatalogRequiredFields(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")
@@ -505,7 +587,47 @@ tags:
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "search", "review")
 
-	assertContains(t, stdout.String(), "company\tplatform/java-review\t1.2.0\tprivate\t-")
+	assertContains(t, stdout.String(), "company/platform/java-review\t1.2.0\tcodex\tprivate\t-")
+	assertContains(t, stdout.String(), "Java review skill")
+}
+
+func TestSearchShowsTargetsAndMatchesTarget(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "description": "Java review skill",
+      "targets": ["codex", "claude"],
+      "tags": ["java", "review"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "java-review"},
+      "trust": {"level": "curated"},
+      "featured": false,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "search", "claude")
+
+	assertContains(t, stdout.String(), "company/platform/java-review\t1.2.0\tcodex,claude\tcurated\t-")
 	assertContains(t, stdout.String(), "Java review skill")
 }
 
@@ -549,6 +671,49 @@ tags:
 	assertContains(t, stdout.String(), "trust: private")
 	assertContains(t, stdout.String(), "install: skillhub install company/platform/java-review")
 	assertContains(t, stdout.String(), "checksum: sha256:")
+}
+
+func TestInfoShowsReviewDetailsForOfficialSkill(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "official/skill-authoring-guide",
+      "name": "skill-authoring-guide",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "Guide agents to create skill packages.",
+      "targets": ["codex", "claude"],
+      "tags": ["skill", "authoring"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "skill-authoring-guide"},
+      "maintainers": ["CassianFlorin"],
+      "license": "MIT",
+      "trust": {"level": "official", "reviewed_at": "2026-05-27", "reviewer": "CassianFlorin"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "info", "company/official/skill-authoring-guide")
+
+	assertContains(t, stdout.String(), "trust: official")
+	assertContains(t, stdout.String(), "trust.reviewed_at: 2026-05-27")
+	assertContains(t, stdout.String(), "trust.reviewer: CassianFlorin")
 }
 
 func TestRegistryListShowsConfiguredRegistries(t *testing.T) {
@@ -837,6 +1002,59 @@ func TestCatalogListAndFeaturedShowSyncedSkills(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "featured")
 	assertContains(t, stdout.String(), "company/platform/java-review")
+}
+
+func TestCatalogListSupportsFeaturedAndOfficialFilters(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "official/skill-authoring-guide",
+      "name": "skill-authoring-guide",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "Guide agents to create skill packages.",
+      "targets": ["codex", "claude"],
+      "tags": ["skill", "authoring"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "skill-authoring-guide"},
+      "trust": {"level": "official", "reviewed_at": "2026-05-27", "reviewer": "CassianFlorin"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    },
+    {
+      "identity": "community/git-helper",
+      "name": "git-helper",
+      "namespace": "community",
+      "version": "0.1.0",
+      "description": "Community git helper.",
+      "targets": ["codex"],
+      "tags": ["git"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "git-helper"},
+      "trust": {"level": "community"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "list", "--featured", "--official")
+
+	assertContains(t, stdout.String(), "company/official/skill-authoring-guide\t0.1.0\tcodex,claude\tofficial\tfeatured")
+	assertNotContains(t, stdout.String(), "community/git-helper")
 }
 
 func TestInstallFromCatalogExternalGitSource(t *testing.T) {
@@ -1360,6 +1578,13 @@ func assertContains(t *testing.T, got string, want string) {
 	t.Helper()
 	if !strings.Contains(got, want) {
 		t.Fatalf("expected %q to contain %q", got, want)
+	}
+}
+
+func assertNotContains(t *testing.T, got string, want string) {
+	t.Helper()
+	if strings.Contains(got, want) {
+		t.Fatalf("expected %q not to contain %q", got, want)
 	}
 }
 

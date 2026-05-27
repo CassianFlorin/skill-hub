@@ -18,6 +18,8 @@ const (
 	IndexSchemaVersion = "2"
 	SourceTypeRegistry = "registry"
 	SourceTypeGit      = "git"
+	TargetCodex        = "codex"
+	TargetClaude       = "claude"
 	TrustOfficial      = "official"
 	TrustCurated       = "curated"
 	TrustCommunity     = "community"
@@ -88,6 +90,7 @@ func SearchIndexes(cfg config.Config, query string) ([]SearchResult, error) {
 			}
 		}
 	}
+	sortSearchResults(results)
 	return results, nil
 }
 
@@ -373,6 +376,11 @@ func validateCatalogSchema(index Index) error {
 		if len(indexed.Targets) == 0 {
 			return fmt.Errorf("index %s missing targets", indexed.Identity)
 		}
+		for _, target := range indexed.Targets {
+			if !validTarget(target) {
+				return fmt.Errorf("index %s unsupported target %q", indexed.Identity, target)
+			}
+		}
 		if indexed.Source.Type == "" || indexed.Source.Path == "" {
 			return fmt.Errorf("index %s missing source", indexed.Identity)
 		}
@@ -391,12 +399,24 @@ func validateCatalogSchema(index Index) error {
 		if indexed.UpdatedAt == "" {
 			return fmt.Errorf("index %s missing updated_at", indexed.Identity)
 		}
+		if indexed.Featured && len(indexed.Tags) == 0 {
+			return fmt.Errorf("featured skill %s missing tags", indexed.Identity)
+		}
 		if seen[indexed.Identity] {
 			return fmt.Errorf("duplicate identity %s", indexed.Identity)
 		}
 		seen[indexed.Identity] = true
 	}
 	return nil
+}
+
+func validTarget(target string) bool {
+	switch target {
+	case TargetCodex, TargetClaude:
+		return true
+	default:
+		return false
+	}
 }
 
 func validSourceType(sourceType string) bool {
@@ -463,6 +483,7 @@ type CatalogFilter struct {
 	Target   string
 	Tag      string
 	Featured *bool
+	Official bool
 }
 
 func ListCatalog(cfg config.Config, filter CatalogFilter) ([]SearchResult, error) {
@@ -486,6 +507,9 @@ func ListCatalog(cfg config.Config, filter CatalogFilter) ([]SearchResult, error
 			if filter.Featured != nil && indexed.Featured != *filter.Featured {
 				continue
 			}
+			if filter.Official && indexed.Trust.Level != TrustOfficial {
+				continue
+			}
 			if filter.Target != "" && !contains(indexed.Targets, filter.Target) {
 				continue
 			}
@@ -495,7 +519,16 @@ func ListCatalog(cfg config.Config, filter CatalogFilter) ([]SearchResult, error
 			results = append(results, SearchResult{Registry: name, Skill: indexed})
 		}
 	}
+	sortSearchResults(results)
 	return results, nil
+}
+
+func sortSearchResults(results []SearchResult) {
+	sort.Slice(results, func(i, j int) bool {
+		left := results[i].Registry + "/" + results[i].Skill.Identity
+		right := results[j].Registry + "/" + results[j].Skill.Identity
+		return left < right
+	})
 }
 
 func contains(values []string, want string) bool {

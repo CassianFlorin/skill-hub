@@ -270,6 +270,11 @@ func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnl
 				return fmt.Errorf("--tag requires a value")
 			}
 			filter.Tag = args[i]
+		case "--featured":
+			featured := true
+			filter.Featured = &featured
+		case "--official":
+			filter.Official = true
 		default:
 			return fmt.Errorf("unknown catalog option %q", args[i])
 		}
@@ -287,7 +292,7 @@ func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnl
 		return nil
 	}
 	for _, result := range results {
-		_, _ = fmt.Fprintf(stdout, "%s/%s\t%s\t%s\t%s\t%s\t%s\n", result.Registry, result.Skill.Identity, result.Skill.Version, strings.Join(result.Skill.Targets, ","), result.Skill.Trust.Level, featuredLabel(result.Skill.Featured), result.Skill.Description)
+		_, _ = fmt.Fprintln(stdout, formatCatalogResult(result))
 	}
 	return nil
 }
@@ -309,7 +314,7 @@ func runSearch(args []string, stdout io.Writer, workDir string) error {
 		return nil
 	}
 	for _, result := range results {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", result.Registry, result.Skill.Identity, result.Skill.Version, result.Skill.Trust.Level, featuredLabel(result.Skill.Featured), result.Skill.Description)
+		_, _ = fmt.Fprintln(stdout, formatCatalogResult(result))
 	}
 	return nil
 }
@@ -345,6 +350,8 @@ func runInfo(args []string, stdout io.Writer, workDir string) error {
 	_, _ = fmt.Fprintf(stdout, "maintainers: %s\n", strings.Join(indexed.Maintainers, ", "))
 	_, _ = fmt.Fprintf(stdout, "license: %s\n", indexed.License)
 	_, _ = fmt.Fprintf(stdout, "trust: %s\n", indexed.Trust.Level)
+	_, _ = fmt.Fprintf(stdout, "trust.reviewed_at: %s\n", indexed.Trust.ReviewedAt)
+	_, _ = fmt.Fprintf(stdout, "trust.reviewer: %s\n", indexed.Trust.Reviewer)
 	_, _ = fmt.Fprintf(stdout, "featured: %t\n", indexed.Featured)
 	_, _ = fmt.Fprintf(stdout, "updated_at: %s\n", indexed.UpdatedAt)
 	_, _ = fmt.Fprintf(stdout, "checksum: %s\n", indexed.Checksum)
@@ -357,6 +364,18 @@ func featuredLabel(featured bool) string {
 		return "featured"
 	}
 	return "-"
+}
+
+func formatCatalogResult(result registry.SearchResult) string {
+	return fmt.Sprintf("%s/%s\t%s\t%s\t%s\t%s\t%s",
+		result.Registry,
+		result.Skill.Identity,
+		result.Skill.Version,
+		strings.Join(result.Skill.Targets, ","),
+		result.Skill.Trust.Level,
+		featuredLabel(result.Skill.Featured),
+		result.Skill.Description,
+	)
 }
 
 func runList(stdout io.Writer) error {
