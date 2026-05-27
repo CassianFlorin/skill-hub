@@ -1,0 +1,11 @@
+name: java-review
+version: 1.2.0
+description: Java review skill
+author: platform-team
+entry: SKILL.md
+targets:
+  - codex
+  - claude
+tags:
+  - java
+  - review
