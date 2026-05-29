@@ -143,6 +143,18 @@ func TestHelpDeployPrintsDeployUsage(t *testing.T) {
 	assertContains(t, stdout.String(), "skillhub deploy status")
 }
 
+func TestHelpListPrintsScopeUsage(t *testing.T) {
+	workspace := t.TempDir()
+	var stdout bytes.Buffer
+
+	runOK(t, workspace, &stdout, "help", "list")
+
+	assertContains(t, stdout.String(), "usage: skillhub list [--scope all|global|project]")
+	assertContains(t, stdout.String(), "--scope all")
+	assertContains(t, stdout.String(), "skillhub list --scope project")
+	assertContains(t, stdout.String(), ".claude/skills")
+}
+
 func TestDoctorShowsProjectAndRuntimeReadiness(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")

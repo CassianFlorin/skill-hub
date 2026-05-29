@@ -73,6 +73,7 @@ func runVersion(stdout io.Writer) error {
 
 const rootUsage = "usage: skillhub <command>"
 const registryUsage = "usage: skillhub registry <add|list|sync|index>"
+const listUsage = "usage: skillhub list [--scope all|global|project]"
 
 func deployUsage() string {
 	return fmt.Sprintf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
@@ -131,6 +132,21 @@ func runHelp(args []string, stdout io.Writer) error {
 		_, _ = fmt.Fprintln(stdout, "  skillhub deploy codex official/git-commit-cn --dry-run")
 		_, _ = fmt.Fprintln(stdout, "  skillhub deploy codex official/git-commit-cn --force")
 		_, _ = fmt.Fprintln(stdout, "  skillhub deploy status")
+		return nil
+	case "list":
+		_, _ = fmt.Fprintln(stdout, listUsage)
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Scopes:")
+		_, _ = fmt.Fprintln(stdout, "  --scope all      Show global installed Skills and project-only Skills")
+		_, _ = fmt.Fprintln(stdout, "  --scope global   Show Skills from $SKILLHUB_HOME/skillhub.lock")
+		_, _ = fmt.Fprintln(stdout, "  --scope project  Show Skills found in the current project")
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Project roots: .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills")
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Examples:")
+		_, _ = fmt.Fprintln(stdout, "  skillhub list")
+		_, _ = fmt.Fprintln(stdout, "  skillhub list --scope global")
+		_, _ = fmt.Fprintln(stdout, "  skillhub list --scope project")
 		return nil
 	default:
 		return fmt.Errorf("unknown help topic %q; run `skillhub help`", args[0])
@@ -833,7 +849,7 @@ func runList(args []string, stdout io.Writer, workDir string) error {
 			}
 			scope = args[i]
 		default:
-			return fmt.Errorf("usage: skillhub list [--scope all|global|project]")
+			return fmt.Errorf(listUsage)
 		}
 	}
 	if scope != "all" && scope != "global" && scope != "project" {
