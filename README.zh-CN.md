@@ -1,6 +1,6 @@
 # skill-hub
 
-[English](README.md)
+[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
 `skill-hub` 是面向 AI Agent 的 Skill 包管理器。它把 Skill 当作可安装的软件包来管理，支持元数据、注册表索引、锁文件状态、回滚历史和运行时部署目标。
 
@@ -76,6 +76,15 @@ skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub deploy codex official/git-commit-cn --force
 skillhub deploy status
+```
+
+`skillhub help` 支持英语、简体中文和繁体中文：
+
+```bash
+skillhub help --lang en
+skillhub help --lang zh-CN
+skillhub help list --lang zh-TW
+SKILLHUB_LANG=zh-CN skillhub help init
 ```
 
 如果只想构建本地二进制而不安装：
@@ -396,7 +405,7 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 
 `v1.3.x` 是当前公开安装链路的打磨线。这个系列的 patch release 应继续收口安装、更新、回滚和发布可靠性，不改变 Skill 包模型。
 
-`v1.3.0` 之后的下一个 patch tag 使用 `v1.3.1`。`v1.4.0` 保留为第一次更广泛团队更新/推广的版本，等 `v1.3.x` 的 CLI 和安装体验稳定后再发布。
+安装器和 CLI 打磨继续使用下一个可用的 `v1.3.x` patch tag。`v1.4.0` 保留为第一次更广泛团队更新/推广的版本，等 `v1.3.x` 的 CLI 和安装体验稳定后再发布。
 
 ## 发布
 
@@ -410,7 +419,7 @@ Tagged releases 会通过 GitHub Actions 发布多平台归档。同一个 relea
 - `Formula/skillhub.rb` 可以在发布时通过 `scripts/generate-homebrew-formula.sh` 刷新。
 
 ```bash
-NEXT_TAG=v1.3.1
+NEXT_TAG=v1.3.3
 git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
 git push origin "${NEXT_TAG}"
 ```
@@ -419,4 +428,4 @@ npm 包版本会从 Git tag 设置。安装时 npm 包会在 `postinstall` 中�
 
 Homebrew 要求 formula 位于 tap 中。仓库中的 `Formula/skillhub.rb` 镜像最新 release formula，并作为 `CassianFlorin/homebrew-tap` 发布路径的来源。
 
-如果 release assets 已经存在，只需要在配置 secrets 后重试 npm 或 Homebrew 发布，可以手动运行 `Publish Installers` workflow，并输入已有 tag，例如 `v1.3.1`。
+如果 release assets 已经存在，只需要在配置 secrets 后重试 npm 或 Homebrew 发布，可以手动运行 `Publish Installers` workflow，并输入已有 tag，例如 `v1.3.3`。

@@ -120,6 +120,41 @@ func TestHelpPrintsCommandOverview(t *testing.T) {
 	assertContains(t, stdout.String(), "Run \"skillhub help <command>\"")
 }
 
+func TestHelpSupportsLanguageOption(t *testing.T) {
+	workspace := t.TempDir()
+
+	t.Run("simplified chinese root", func(t *testing.T) {
+		var stdout bytes.Buffer
+
+		runOK(t, workspace, &stdout, "help", "--lang", "zh-CN")
+
+		assertContains(t, stdout.String(), "用法：skillhub <命令>")
+		assertContains(t, stdout.String(), "命令：")
+		assertContains(t, stdout.String(), "运行 \"skillhub help <命令>\"")
+	})
+
+	t.Run("traditional chinese command", func(t *testing.T) {
+		var stdout bytes.Buffer
+
+		runOK(t, workspace, &stdout, "help", "list", "--lang", "zh-TW")
+
+		assertContains(t, stdout.String(), "用法：skillhub list [--scope all|global|project]")
+		assertContains(t, stdout.String(), "範圍：")
+		assertContains(t, stdout.String(), "--scope project  顯示目前專案中的 Skill")
+	})
+}
+
+func TestHelpUsesLanguageEnvironment(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("SKILLHUB_LANG", "zh-CN")
+	var stdout bytes.Buffer
+
+	runOK(t, workspace, &stdout, "help", "init")
+
+	assertContains(t, stdout.String(), "用法：skillhub init")
+	assertContains(t, stdout.String(), "在当前项目中创建 skillhub.yaml")
+}
+
 func TestHelpSupportsEveryListedCommand(t *testing.T) {
 	workspace := t.TempDir()
 	commands := []string{

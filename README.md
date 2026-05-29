@@ -11,7 +11,7 @@ Install, version, update, roll back, and deploy Skills across Codex, Claude, and
 [![Homebrew](https://img.shields.io/badge/Homebrew-CassianFlorin%2Ftap-FBB040?logo=homebrew&logoColor=black)](https://github.com/CassianFlorin/homebrew-tap)
 [![Release](https://img.shields.io/github/v/release/CassianFlorin/skill-hub?label=release)](https://github.com/CassianFlorin/skill-hub/releases)
 
-[English](README.md) · [简体中文](README.zh-CN.md)
+[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
 </div>
 
@@ -131,6 +131,15 @@ skillhub catalog export --registry hub --output ./public/catalog
 skillhub install hub/official/git-commit-cn@v0.1.0
 skillhub list --scope all
 skillhub list --scope project
+```
+
+Help output supports English, Simplified Chinese, and Traditional Chinese:
+
+```bash
+skillhub help --lang en
+skillhub help --lang zh-CN
+skillhub help list --lang zh-TW
+SKILLHUB_LANG=zh-CN skillhub help init
 ```
 
 ## Catalog Discovery
@@ -404,7 +413,7 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 
 `v1.3.x` is the hardening line for the current public installer flow. Patch releases in this line should keep tightening installation, update, rollback, and release reliability without changing the package model.
 
-Use `v1.3.1` as the next patch tag after `v1.3.0`. Keep `v1.4.0` reserved for the first broader team rollout once the `v1.3.x` CLI and installer experience is stable enough.
+Use the next available `v1.3.x` patch tag for installer and CLI hardening. Keep `v1.4.0` reserved for the first broader team rollout once the `v1.3.x` CLI and installer experience is stable enough.
 
 ## Release
 
@@ -418,7 +427,7 @@ Tagged releases publish multi-platform archives through GitHub Actions. The same
 - `Formula/skillhub.rb` in this repository can be refreshed with `scripts/generate-homebrew-formula.sh` when cutting a release.
 
 ```bash
-NEXT_TAG=v1.3.1
+NEXT_TAG=v1.3.3
 git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
 git push origin "${NEXT_TAG}"
 ```
@@ -427,4 +436,4 @@ The npm package version is set from the Git tag during release. The package down
 
 Homebrew requires formulae to live in a tap. The checked-in `Formula/skillhub.rb` mirrors the latest release formula and is the source used for the `CassianFlorin/homebrew-tap` publication path.
 
-If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.1`.
+If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.3`.
