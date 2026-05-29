@@ -74,6 +74,7 @@ func runVersion(stdout io.Writer) error {
 const rootUsage = "usage: skillhub <command>"
 const registryUsage = "usage: skillhub registry <add|list|sync|index>"
 const listUsage = "usage: skillhub list [--scope all|global|project]"
+const catalogUsage = "usage: skillhub catalog <list|featured|tags|targets|namespaces|trust|export>"
 
 func deployUsage() string {
 	return fmt.Sprintf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
@@ -109,6 +110,15 @@ func runHelp(args []string, stdout io.Writer) error {
 		return fmt.Errorf("usage: skillhub help [command]")
 	}
 	switch args[0] {
+	case "version":
+		printHelp(stdout, "usage: skillhub version", "Print the skillhub build version.", "  skillhub version")
+		return nil
+	case "doctor":
+		printHelp(stdout, "usage: skillhub doctor", "Show local config, runtime directories, registries, and installed Skill count.", "  skillhub doctor")
+		return nil
+	case "init":
+		printHelp(stdout, "usage: skillhub init", "Create skillhub.yaml in the current project with the default hub registry.", "  skillhub init")
+		return nil
 	case "registry":
 		_, _ = fmt.Fprintln(stdout, registryUsage)
 		_, _ = fmt.Fprintln(stdout)
@@ -120,6 +130,33 @@ func runHelp(args []string, stdout io.Writer) error {
 		_, _ = fmt.Fprintln(stdout, "  skillhub registry sync --all")
 		_, _ = fmt.Fprintln(stdout, "  skillhub registry index generate company")
 		_, _ = fmt.Fprintln(stdout, "  skillhub registry index validate company")
+		return nil
+	case "catalog":
+		_, _ = fmt.Fprintln(stdout, catalogUsage)
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Options: --registry, --target, --tag, --namespace, --trust, --featured, --official, --json")
+		_, _ = fmt.Fprintln(stdout, "Export also requires: --output <dir>")
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Examples:")
+		_, _ = fmt.Fprintln(stdout, "  skillhub catalog list --registry hub")
+		_, _ = fmt.Fprintln(stdout, "  skillhub catalog featured --registry hub")
+		_, _ = fmt.Fprintln(stdout, "  skillhub catalog tags --registry hub")
+		_, _ = fmt.Fprintln(stdout, "  skillhub catalog export --registry hub --output ./public/catalog")
+		return nil
+	case "search":
+		printHelp(stdout, "usage: skillhub search <query> [--json]", "Search synced registry catalog data.", "  skillhub search git\n  skillhub search runtime --json")
+		return nil
+	case "info":
+		printHelp(stdout, "usage: skillhub info <registry/identity|identity> [--json]", "Show details for one catalog Skill from synced registry indexes.", "  skillhub info hub/official/git-commit-cn\n  skillhub info official/git-commit-cn --json")
+		return nil
+	case "install":
+		printHelp(stdout, "usage: skillhub install <path|registry/skill>", "Install a Skill from a local path, local registry, or Git registry.", "  skillhub install hub/official/git-commit-cn\n  skillhub install ./agent/skills/commerce-data-fix-sql\n  skillhub install company/java-review@1.2.0")
+		return nil
+	case "rollback":
+		printHelp(stdout, "usage: skillhub rollback <identity>", "Restore the latest previous installed copy for an installed Skill.", "  skillhub rollback platform-team/java-review")
+		return nil
+	case "uninstall":
+		printHelp(stdout, "usage: skillhub uninstall <identity> [--deployed]", "Remove an installed Skill. Use --deployed to also remove runtime copies.", "  skillhub uninstall platform-team/java-review\n  skillhub uninstall platform-team/java-review --deployed")
 		return nil
 	case "deploy":
 		_, _ = fmt.Fprintln(stdout, deployUsage())
@@ -148,9 +185,21 @@ func runHelp(args []string, stdout io.Writer) error {
 		_, _ = fmt.Fprintln(stdout, "  skillhub list --scope global")
 		_, _ = fmt.Fprintln(stdout, "  skillhub list --scope project")
 		return nil
+	case "update":
+		printHelp(stdout, "usage: skillhub update", "Update installed Skills from their recorded sources.", "  skillhub update")
+		return nil
 	default:
 		return fmt.Errorf("unknown help topic %q; run `skillhub help`", args[0])
 	}
+}
+
+func printHelp(stdout io.Writer, usageLine string, description string, examples string) {
+	_, _ = fmt.Fprintln(stdout, usageLine)
+	_, _ = fmt.Fprintln(stdout)
+	_, _ = fmt.Fprintln(stdout, description)
+	_, _ = fmt.Fprintln(stdout)
+	_, _ = fmt.Fprintln(stdout, "Examples:")
+	_, _ = fmt.Fprintln(stdout, examples)
 }
 
 func runDoctor(stdout io.Writer, workDir string) error {

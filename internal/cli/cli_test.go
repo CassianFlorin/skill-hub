@@ -120,6 +120,35 @@ func TestHelpPrintsCommandOverview(t *testing.T) {
 	assertContains(t, stdout.String(), "Run \"skillhub help <command>\"")
 }
 
+func TestHelpSupportsEveryListedCommand(t *testing.T) {
+	workspace := t.TempDir()
+	commands := []string{
+		"version",
+		"doctor",
+		"init",
+		"registry",
+		"catalog",
+		"search",
+		"info",
+		"install",
+		"rollback",
+		"uninstall",
+		"list",
+		"update",
+		"deploy",
+	}
+
+	for _, command := range commands {
+		t.Run(command, func(t *testing.T) {
+			var stdout bytes.Buffer
+
+			runOK(t, workspace, &stdout, "help", command)
+
+			assertContains(t, stdout.String(), "usage: skillhub "+command)
+		})
+	}
+}
+
 func TestHelpRegistryPrintsRegistryUsage(t *testing.T) {
 	workspace := t.TempDir()
 	var stdout bytes.Buffer
