@@ -1,5 +1,7 @@
 # skill-hub
 
+[简体中文](README.zh-CN.md)
+
 `skill-hub` is a Skill package manager for AI agents. It treats a Skill as an installable package with metadata, registry indexing, lockfile state, rollback history, and runtime deploy targets.
 
 Current release line: `v1.3.x`.
@@ -16,23 +18,23 @@ Current release line: `v1.3.x`.
 
 ## Installation
 
-After the Homebrew tap is published, install with:
+Install with Homebrew:
 
 ```bash
 brew tap CassianFlorin/tap
 brew install skillhub
 ```
 
-After the npm package is published, install with npm:
+Install with npm:
 
 ```bash
 npm install -g @cassianflorin/skillhub
 ```
 
-Every tagged release also attaches an npm tarball. That gives npm users a fallback even before the npm registry package is published:
+Every tagged release also attaches an npm tarball. Use the release URL when you need to pin or mirror a specific release:
 
 ```bash
-npm install -g https://github.com/CassianFlorin/skill-hub/releases/download/vX.Y.Z/cassianflorin-skillhub-X.Y.Z.tgz
+npm install -g https://github.com/CassianFlorin/skill-hub/releases/download/v1.3.0/cassianflorin-skillhub-1.3.0.tgz
 ```
 
 Developers can also install directly from source:
