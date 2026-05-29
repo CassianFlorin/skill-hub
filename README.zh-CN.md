@@ -23,18 +23,21 @@
 ```bash
 brew tap CassianFlorin/tap
 brew install skillhub
+brew upgrade skillhub
 ```
 
 使用 npm 安装：
 
 ```bash
 npm install -g @cassianflorin/skillhub
+npm update -g @cassianflorin/skillhub
 ```
 
 每个 tagged release 也会附带 npm tarball。如果你需要固定或镜像某个具体版本，可以使用 release URL：
 
 ```bash
-npm install -g https://github.com/CassianFlorin/skill-hub/releases/download/v1.3.0/cassianflorin-skillhub-1.3.0.tgz
+VERSION=1.3.0
+npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${VERSION}/cassianflorin-skillhub-${VERSION}.tgz"
 ```
 
 开发者也可以直接从源码安装：
@@ -385,6 +388,12 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 ./skillhub deploy codex platform-team/java-review --dry-run
 ```
 
+## 版本策略
+
+`v1.3.x` 是当前公开安装链路的打磨线。这个系列的 patch release 应继续收口安装、更新、回滚和发布可靠性，不改变 Skill 包模型。
+
+`v1.3.0` 之后的下一个 patch tag 使用 `v1.3.1`。`v1.4.0` 保留为第一次更广泛团队更新/推广的版本，等 `v1.3.x` 的 CLI 和安装体验稳定后再发布。
+
 ## 发布
 
 CI 会在 push 和 pull request 上运行 `go test ./...`、`npm test --prefix npm` 和 `go build -v ./cmd/skillhub`。
@@ -397,12 +406,13 @@ Tagged releases 会通过 GitHub Actions 发布多平台归档。同一个 relea
 - `Formula/skillhub.rb` 可以在发布时通过 `scripts/generate-homebrew-formula.sh` 刷新。
 
 ```bash
-git tag -a v1.3.0 -m "v1.3.0"
-git push origin v1.3.0
+NEXT_TAG=v1.3.1
+git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
+git push origin "${NEXT_TAG}"
 ```
 
 npm 包版本会从 Git tag 设置。安装时 npm 包会在 `postinstall` 中下载匹配的 GitHub Release 归档，并用 `checksums.txt` 校验。
 
 Homebrew 要求 formula 位于 tap 中。仓库中的 `Formula/skillhub.rb` 镜像最新 release formula，并作为 `CassianFlorin/homebrew-tap` 发布路径的来源。
 
-如果 release assets 已经存在，只需要在配置 secrets 后重试 npm 或 Homebrew 发布，可以手动运行 `Publish Installers` workflow，并输入已有 tag，例如 `v1.3.0`。
+如果 release assets 已经存在，只需要在配置 secrets 后重试 npm 或 Homebrew 发布，可以手动运行 `Publish Installers` workflow，并输入已有 tag，例如 `v1.3.1`。

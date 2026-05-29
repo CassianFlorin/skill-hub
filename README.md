@@ -33,6 +33,7 @@ Current release line: `v1.3.x`.
 - [Registry Index Format](#registry-index-format)
 - [State Files](#state-files)
 - [Local Development](#local-development)
+- [Version Policy](#version-policy)
 - [Release](#release)
 
 ## Why skill-hub
@@ -59,18 +60,21 @@ Homebrew:
 ```bash
 brew tap CassianFlorin/tap
 brew install skillhub
+brew upgrade skillhub
 ```
 
 npm:
 
 ```bash
 npm install -g @cassianflorin/skillhub
+npm update -g @cassianflorin/skillhub
 ```
 
 Every tagged release also attaches an npm tarball. Use the release URL when you need to pin or mirror a specific release:
 
 ```bash
-npm install -g https://github.com/CassianFlorin/skill-hub/releases/download/v1.3.0/cassianflorin-skillhub-1.3.0.tgz
+VERSION=1.3.0
+npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${VERSION}/cassianflorin-skillhub-${VERSION}.tgz"
 ```
 
 Go source install:
@@ -393,6 +397,12 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 ./skillhub deploy codex platform-team/java-review --dry-run
 ```
 
+## Version Policy
+
+`v1.3.x` is the hardening line for the current public installer flow. Patch releases in this line should keep tightening installation, update, rollback, and release reliability without changing the package model.
+
+Use `v1.3.1` as the next patch tag after `v1.3.0`. Keep `v1.4.0` reserved for the first broader team rollout once the `v1.3.x` CLI and installer experience is stable enough.
+
 ## Release
 
 CI runs `go test ./...`, `npm test --prefix npm`, and `go build -v ./cmd/skillhub` on pushes and pull requests.
@@ -405,12 +415,13 @@ Tagged releases publish multi-platform archives through GitHub Actions. The same
 - `Formula/skillhub.rb` in this repository can be refreshed with `scripts/generate-homebrew-formula.sh` when cutting a release.
 
 ```bash
-git tag -a v1.3.0 -m "v1.3.0"
-git push origin v1.3.0
+NEXT_TAG=v1.3.1
+git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
+git push origin "${NEXT_TAG}"
 ```
 
 The npm package version is set from the Git tag during release. The package downloads the matching GitHub Release archive during `postinstall` and verifies it against `checksums.txt`.
 
 Homebrew requires formulae to live in a tap. The checked-in `Formula/skillhub.rb` mirrors the latest release formula and is the source used for the `CassianFlorin/homebrew-tap` publication path.
 
-If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.0`.
+If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.1`.
