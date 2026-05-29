@@ -14,36 +14,69 @@ Current release line: `v1.3.x`.
 - Exports a static catalog snapshot as `index.html` and `catalog.json`.
 - Validates registry indexes before sync or publication.
 
-## Quick Start
+## Installation
 
-Build the CLI:
+After the Homebrew tap is published, install with:
 
 ```bash
-go build -o skillhub ./cmd/skillhub
+brew tap CassianFlorin/tap
+brew install skillhub
+```
+
+After the npm package is published, install with npm:
+
+```bash
+npm install -g @cassianflorin/skillhub
+```
+
+Every tagged release also attaches an npm tarball. That gives npm users a fallback even before the npm registry package is published:
+
+```bash
+npm install -g https://github.com/CassianFlorin/skill-hub/releases/download/vX.Y.Z/cassianflorin-skillhub-X.Y.Z.tgz
+```
+
+Developers can also install directly from source:
+
+```bash
+go install github.com/cassian/skill-hub/cmd/skillhub@latest
+```
+
+## Quick Start
+
+Check the installed CLI:
+
+```bash
+skillhub version
 ```
 
 Initialize a project. This adds the default `hub` registry pointing at `https://github.com/CassianFlorin/skill-hub-registry.git`.
 
 ```bash
-./skillhub init
-./skillhub registry sync hub
+skillhub init
+skillhub registry sync hub
 ```
 
 Discover and inspect Skills:
 
 ```bash
-./skillhub catalog featured --registry hub
-./skillhub catalog list --registry hub --target codex
-./skillhub search git
-./skillhub info hub/official/git-commit-cn
+skillhub catalog featured --registry hub
+skillhub catalog list --registry hub --target codex
+skillhub search git
+skillhub info hub/official/git-commit-cn
 ```
 
 Install and deploy:
 
 ```bash
-./skillhub install hub/official/git-commit-cn
-./skillhub deploy codex official/git-commit-cn --force
-./skillhub deploy status
+skillhub install hub/official/git-commit-cn
+skillhub deploy codex official/git-commit-cn --force
+skillhub deploy status
+```
+
+To build a local binary without installing it:
+
+```bash
+go build -o skillhub ./cmd/skillhub
 ```
 
 ## Command Overview
@@ -329,6 +362,7 @@ Run the test suite and build the CLI:
 
 ```bash
 go test ./...
+npm test --prefix npm
 go build ./cmd/skillhub
 ```
 
@@ -351,11 +385,22 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 
 ## Release
 
-CI runs `go test ./...` and `go build -v ./cmd/skillhub` on pushes and pull requests.
+CI runs `go test ./...`, `npm test --prefix npm`, and `go build -v ./cmd/skillhub` on pushes and pull requests.
 
-Tagged releases publish multi-platform archives through GitHub Actions:
+Tagged releases publish multi-platform archives through GitHub Actions. The same release workflow can also publish:
+
+- Homebrew formula updates to `CassianFlorin/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured with write access to that tap repository.
+- The npm package `@cassianflorin/skillhub` when `NPM_TOKEN` is configured with publish access to the npm scope.
+- An npm tarball attached to the GitHub Release, so users can still install with npm from the release URL if npm registry publishing is not configured.
+- `Formula/skillhub.rb` in this repository can be refreshed with `scripts/generate-homebrew-formula.sh` when cutting a release.
 
 ```bash
 git tag -a v1.3.0 -m "v1.3.0"
 git push origin v1.3.0
 ```
+
+The npm package version is set from the Git tag during release. The package downloads the matching GitHub Release archive during `postinstall` and verifies it against `checksums.txt`.
+
+Homebrew requires formulae to live in a tap. The checked-in `Formula/skillhub.rb` mirrors the latest release formula and is the source used for the `CassianFlorin/homebrew-tap` publication path.
+
+If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.0`.

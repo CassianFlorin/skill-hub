@@ -22,8 +22,17 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
       - name: Test
         run: go test ./...
+
+      - name: Test npm installer
+        run: npm test --prefix npm
 
       - name: Build archives
         shell: bash
@@ -64,6 +73,12 @@ jobs:
             rm -rf "dist/${name}"
           done
 
+          (
+            cd npm
+            npm version "${tag#v}" --no-git-tag-version --allow-same-version
+            npm pack --pack-destination ../dist
+          )
+
           (cd dist && shasum -a 256 * > checksums.txt)
 
       - name: Publish GitHub Release
@@ -74,3 +89,41 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes
+
+      - name: Publish npm package
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "Skipping npm publish because NPM_TOKEN is not configured."
+            exit 0
+          fi
+
+          npm publish --access public
+
+      - name: Publish Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO: CassianFlorin/homebrew-tap
+        run: |
+          if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+            echo "Skipping Homebrew formula publish because HOMEBREW_TAP_TOKEN is not configured."
+            exit 0
+          fi
+
+          tap_dir="$(mktemp -d)"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" "${tap_dir}"
+          ./scripts/generate-homebrew-formula.sh "${GITHUB_REF_NAME}" dist/checksums.txt "${tap_dir}/Formula/skillhub.rb"
+
+          git -C "${tap_dir}" config user.name "github-actions[bot]"
+          git -C "${tap_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${tap_dir}" add Formula/skillhub.rb
+
+          if git -C "${tap_dir}" diff --cached --quiet; then
+            echo "Homebrew formula already up to date."
+            exit 0
+          fi
+
+          git -C "${tap_dir}" commit -m "Update skillhub to ${GITHUB_REF_NAME}"
+          git -C "${tap_dir}" push

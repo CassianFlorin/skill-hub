@@ -26,8 +26,16 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
       - name: Test
         run: go test ./...
+
+      - name: Test npm installer
+        run: npm test --prefix npm
 
       - name: Build
         run: go build -v ./cmd/skillhub

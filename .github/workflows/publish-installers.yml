@@ -1,0 +1,84 @@
+name: Publish Installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, for example v1.3.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish npm and Homebrew installers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Download release checksums
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern checksums.txt \
+            --dir dist
+
+      - name: Test npm installer package
+        run: npm test --prefix npm
+
+      - name: Publish npm package
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "Skipping npm publish because NPM_TOKEN is not configured."
+            exit 0
+          fi
+
+          npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+          npm publish --access public
+
+      - name: Publish Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO: CassianFlorin/homebrew-tap
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+            echo "Skipping Homebrew formula publish because HOMEBREW_TAP_TOKEN is not configured."
+            exit 0
+          fi
+
+          tap_dir="$(mktemp -d)"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" "${tap_dir}"
+          ./scripts/generate-homebrew-formula.sh "${TAG}" dist/checksums.txt "${tap_dir}/Formula/skillhub.rb"
+
+          git -C "${tap_dir}" config user.name "github-actions[bot]"
+          git -C "${tap_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${tap_dir}" add Formula/skillhub.rb
+
+          if git -C "${tap_dir}" diff --cached --quiet; then
+            echo "Homebrew formula already up to date."
+            exit 0
+          fi
+
+          git -C "${tap_dir}" commit -m "Update skillhub to ${TAG}"
+          git -C "${tap_dir}" push
