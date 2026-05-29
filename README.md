@@ -1,31 +1,67 @@
+<div align="center">
+
 # skill-hub
 
-[简体中文](README.zh-CN.md)
+**A Skill package manager for AI agents.**
 
-`skill-hub` is a Skill package manager for AI agents. It treats a Skill as an installable package with metadata, registry indexing, lockfile state, rollback history, and runtime deploy targets.
+Install, version, update, roll back, and deploy Skills across Codex, Claude, and Gemini from one CLI.
+
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
+[![npm](https://img.shields.io/npm/v/@cassianflorin/skillhub?logo=npm&label=npm)](https://www.npmjs.com/package/@cassianflorin/skillhub)
+[![Homebrew](https://img.shields.io/badge/Homebrew-CassianFlorin%2Ftap-FBB040?logo=homebrew&logoColor=black)](https://github.com/CassianFlorin/homebrew-tap)
+[![Release](https://img.shields.io/github/v/release/CassianFlorin/skill-hub?label=release)](https://github.com/CassianFlorin/skill-hub/releases)
+
+[English](README.md) · [简体中文](README.zh-CN.md)
+
+</div>
+
+`skill-hub` treats a Skill as an installable package with metadata, registry indexing, lockfile state, rollback history, and runtime deploy targets.
 
 Current release line: `v1.3.x`.
 
-## What It Does
+## Contents
 
-- Discovers Skills from local or git-backed registries.
-- Installs Skills into a managed local store under `$SKILLHUB_HOME`.
-- Keeps installed state in `skillhub.lock`, including versions, checksums, source refs, and deployed runtimes.
-- Supports pinned installs from metadata versions, git tags, branches, or commits.
-- Deploys installed Skills to Codex, Claude, and Gemini runtime directories.
-- Exports a static catalog snapshot as `index.html` and `catalog.json`.
-- Validates registry indexes before sync or publication.
+- [Why skill-hub](#why-skill-hub)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Command Overview](#command-overview)
+- [Catalog Discovery](#catalog-discovery)
+- [Static Catalog Export](#static-catalog-export)
+- [Install, Update, And Rollback](#install-update-and-rollback)
+- [Runtime Deploy](#runtime-deploy)
+- [Skill Package Format](#skill-package-format)
+- [Registry Index Format](#registry-index-format)
+- [State Files](#state-files)
+- [Local Development](#local-development)
+- [Release](#release)
+
+## Why skill-hub
+
+| Capability | What it gives you |
+| --- | --- |
+| Registry discovery | Find Skills from local or Git-backed registries. |
+| Reproducible installs | Track installed versions, checksums, source refs, and deployments in `skillhub.lock`. |
+| Safe upgrades | Pin installs to versions, tags, branches, or commits; update and roll back when needed. |
+| Runtime deployment | Copy installed Skills into Codex, Claude, and Gemini runtime directories. |
+| Catalog publishing | Export a static marketplace snapshot as `index.html` and `catalog.json`. |
+| Registry validation | Validate indexes before sync or publication. |
 
 ## Installation
 
-Install with Homebrew:
+| Method | Command |
+| --- | --- |
+| Homebrew | `brew tap CassianFlorin/tap && brew install skillhub` |
+| npm | `npm install -g @cassianflorin/skillhub` |
+| Go source install | `go install github.com/cassian/skill-hub/cmd/skillhub@latest` |
+
+Homebrew:
 
 ```bash
 brew tap CassianFlorin/tap
 brew install skillhub
 ```
 
-Install with npm:
+npm:
 
 ```bash
 npm install -g @cassianflorin/skillhub
@@ -37,7 +73,7 @@ Every tagged release also attaches an npm tarball. Use the release URL when you 
 npm install -g https://github.com/CassianFlorin/skill-hub/releases/download/v1.3.0/cassianflorin-skillhub-1.3.0.tgz
 ```
 
-Developers can also install directly from source:
+Go source install:
 
 ```bash
 go install github.com/cassian/skill-hub/cmd/skillhub@latest
@@ -45,31 +81,21 @@ go install github.com/cassian/skill-hub/cmd/skillhub@latest
 
 ## Quick Start
 
-Check the installed CLI:
+Initialize a project and sync the default `hub` registry:
 
 ```bash
 skillhub version
-```
-
-Initialize a project. This adds the default `hub` registry pointing at `https://github.com/CassianFlorin/skill-hub-registry.git`.
-
-```bash
 skillhub init
 skillhub registry sync hub
 ```
 
-Discover and inspect Skills:
+Discover, inspect, install, and deploy a Skill:
 
 ```bash
 skillhub catalog featured --registry hub
 skillhub catalog list --registry hub --target codex
 skillhub search git
 skillhub info hub/official/git-commit-cn
-```
-
-Install and deploy:
-
-```bash
 skillhub install hub/official/git-commit-cn
 skillhub deploy codex official/git-commit-cn --force
 skillhub deploy status
@@ -83,40 +109,22 @@ go build -o skillhub ./cmd/skillhub
 
 ## Command Overview
 
-```bash
-skillhub version
-skillhub doctor
-skillhub init
+| Area | Commands |
+| --- | --- |
+| Project setup | `skillhub version`, `skillhub doctor`, `skillhub init` |
+| Registries | `skillhub registry add`, `skillhub registry list`, `skillhub registry sync`, `skillhub registry index` |
+| Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
+| Lifecycle | `skillhub install`, `skillhub list`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
+| Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy status` |
+| Publication | `skillhub catalog export` |
 
+Common examples:
+
+```bash
 skillhub registry add local company ./examples/local-registry
 skillhub registry add git team git@github.com:your-org/skills.git
-skillhub registry list
-skillhub registry sync hub
-skillhub registry sync --all
-skillhub registry index generate company
-skillhub registry index validate company
-
-skillhub catalog list --registry hub
-skillhub catalog featured --registry hub
-skillhub catalog tags --registry hub
-skillhub catalog targets --registry hub
-skillhub catalog namespaces --registry hub
-skillhub catalog trust --registry hub
 skillhub catalog export --registry hub --output ./public/catalog
-
-skillhub search java
-skillhub info hub/official/git-commit-cn
-skillhub install hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn@v0.1.0
-skillhub list
-skillhub update
-skillhub rollback official/git-commit-cn
-skillhub uninstall official/git-commit-cn
-
-skillhub deploy codex
-skillhub deploy claude
-skillhub deploy gemini
-skillhub deploy status
 ```
 
 ## Catalog Discovery
