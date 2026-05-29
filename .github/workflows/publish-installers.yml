@@ -53,6 +53,10 @@ jobs:
           fi
 
           npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+          if npm view "@cassianflorin/skillhub@${TAG#v}" version >/dev/null 2>&1; then
+            echo "npm package ${TAG#v} already exists; skipping npm publish."
+            exit 0
+          fi
           npm publish --access public
 
       - name: Publish Homebrew formula
