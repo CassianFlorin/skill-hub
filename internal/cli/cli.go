@@ -14,6 +14,7 @@ import (
 	"github.com/cassian/skill-hub/internal/config"
 	"github.com/cassian/skill-hub/internal/deploy"
 	"github.com/cassian/skill-hub/internal/install"
+	projectskills "github.com/cassian/skill-hub/internal/project"
 	"github.com/cassian/skill-hub/internal/registry"
 )
 
@@ -55,7 +56,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 	case "uninstall":
 		return runUninstall(args[1:], stdout)
 	case "list":
-		return runList(stdout)
+		return runList(args[1:], stdout, workDir)
 	case "update":
 		return runUpdate(stdout)
 	case "deploy":
@@ -96,7 +97,7 @@ func runHelp(args []string, stdout io.Writer) error {
 		_, _ = fmt.Fprintln(stdout, "  install     Install a Skill from a path or registry")
 		_, _ = fmt.Fprintln(stdout, "  rollback    Restore the previous installed copy")
 		_, _ = fmt.Fprintln(stdout, "  uninstall   Remove an installed Skill")
-		_, _ = fmt.Fprintln(stdout, "  list        List installed Skills")
+		_, _ = fmt.Fprintln(stdout, "  list        List global and project Skills")
 		_, _ = fmt.Fprintln(stdout, "  update      Update installed Skills from their sources")
 		_, _ = fmt.Fprintln(stdout, "  deploy      Copy installed Skills into runtime directories")
 		_, _ = fmt.Fprintln(stdout)
@@ -821,17 +822,49 @@ var catalogHTMLTemplate = template.Must(template.New("catalog").Parse(`<!doctype
 </html>
 `))
 
-func runList(stdout io.Writer) error {
+func runList(args []string, stdout io.Writer, workDir string) error {
+	scope := "all"
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--scope":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--scope requires a value")
+			}
+			scope = args[i]
+		default:
+			return fmt.Errorf("usage: skillhub list [--scope all|global|project]")
+		}
+	}
+	if scope != "all" && scope != "global" && scope != "project" {
+		return fmt.Errorf("unsupported scope %q", scope)
+	}
+
 	lock, err := install.LoadLock()
 	if err != nil {
 		return err
 	}
-	if len(lock.Skills) == 0 {
-		_, _ = fmt.Fprintln(stdout, "no skills installed")
-		return nil
+	projectSkills, err := projectskills.DiscoverSkills(workDir)
+	if err != nil {
+		return err
 	}
-	for _, locked := range lock.Skills {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", locked.DisplayIdentity(), locked.Version, locked.Description)
+
+	wrote := false
+	if scope == "all" || scope == "global" {
+		for _, locked := range lock.Skills {
+			_, _ = fmt.Fprintf(stdout, "global\t%s\t%s\t%s\n", locked.DisplayIdentity(), locked.Version, locked.Description)
+			wrote = true
+		}
+	}
+	if scope == "all" || scope == "project" {
+		for _, discovered := range projectSkills {
+			_, _ = fmt.Fprintf(stdout, "project\t%s\t%s\t%s\n", discovered.Identity, discovered.Version, discovered.RelPath)
+			wrote = true
+		}
+	}
+	if !wrote {
+		_, _ = fmt.Fprintln(stdout, "no skills found")
+		return nil
 	}
 	return nil
 }

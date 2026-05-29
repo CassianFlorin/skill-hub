@@ -129,6 +129,8 @@ skillhub registry add local company ./examples/local-registry
 skillhub registry add git team git@github.com:your-org/skills.git
 skillhub catalog export --registry hub --output ./public/catalog
 skillhub install hub/official/git-commit-cn@v0.1.0
+skillhub list --scope all
+skillhub list --scope project
 ```
 
 ## Catalog Discovery
@@ -366,6 +368,7 @@ Generate an index for a local registry:
 - Git registry cache: `$SKILLHUB_HOME/cache/registries/<registry-name>`
 - Installed Skills: `$SKILLHUB_HOME/installed/<safe-identity>`
 - Lockfile: `$SKILLHUB_HOME/skillhub.lock`
+- Project-only Skill roots discovered by `skillhub list`: `.skillhub/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, and `agent/skills`
 - Runtime copies: configured by the runtime env vars listed above
 
 `skillhub.yaml` and `skillhub.lock` are JSON documents with YAML-compatible filenames. This keeps the CLI dependency-light while preserving the intended file names.

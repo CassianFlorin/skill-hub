@@ -113,6 +113,8 @@ skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn@v0.1.0
 skillhub list
+skillhub list --scope all
+skillhub list --scope project
 skillhub update
 skillhub rollback official/git-commit-cn
 skillhub uninstall official/git-commit-cn
@@ -358,6 +360,7 @@ skillhub registry index generate company
 - Git 注册表缓存：`$SKILLHUB_HOME/cache/registries/<registry-name>`
 - 已安装 Skills：`$SKILLHUB_HOME/installed/<safe-identity>`
 - 锁文件：`$SKILLHUB_HOME/skillhub.lock`
+- `skillhub list` 会发现的项目内 Skill 根目录：`.skillhub/skills`、`.codex/skills`、`.claude/skills`、`.agents/skills`、`agent/skills`
 - 运行时副本：由上方运行时环境变量配置
 
 `skillhub.yaml` 和 `skillhub.lock` 是带 YAML 兼容文件名的 JSON 文档。这样可以保持 CLI 依赖轻量，同时保留预期文件名。

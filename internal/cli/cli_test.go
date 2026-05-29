@@ -197,6 +197,52 @@ func TestInstallSkillOnlyDirectoryGeneratesMetadataAndNamespaceIdentity(t *testi
 	assertContains(t, stdout.String(), "unversioned")
 }
 
+func TestListShowsGlobalAndProjectSkillsWithScope(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	globalSkill := filepath.Join(workspace, "global-skill")
+	projectSkill := filepath.Join(projectDir, ".claude", "skills", "commerce-data-fix-sql")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(globalSkill, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+description: Global Java review skill
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(globalSkill, "SKILL.md"), "# Java Review\n")
+	mustWriteFile(t, filepath.Join(projectSkill, "SKILL.md"), strings.TrimSpace(`
+---
+name: commerce-data-fix-sql
+description: QNVIP project-only data fix SQL workflow.
+---
+
+# Commerce Data Fix SQL
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", globalSkill)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "list")
+	assertContains(t, stdout.String(), "global\tplatform/java-review\t1.2.0\tGlobal Java review skill")
+	assertContains(t, stdout.String(), "project\tproject/commerce-data-fix-sql\tunversioned\t.claude/skills/commerce-data-fix-sql")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "list", "--scope", "project")
+	assertContains(t, stdout.String(), "project\tproject/commerce-data-fix-sql")
+	assertNotContains(t, stdout.String(), "platform/java-review")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "list", "--scope", "global")
+	assertContains(t, stdout.String(), "global\tplatform/java-review")
+	assertNotContains(t, stdout.String(), "commerce-data-fix-sql")
+}
+
 func TestRegistryAddGitRecordsMetadataWithoutCloning(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")
