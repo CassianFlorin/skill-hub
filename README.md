@@ -115,7 +115,7 @@ go build -o skillhub ./cmd/skillhub
 
 | Area | Commands |
 | --- | --- |
-| Project setup | `skillhub version`, `skillhub doctor`, `skillhub init` |
+| Project setup | `skillhub help`, `skillhub version`, `skillhub doctor`, `skillhub init` |
 | Registries | `skillhub registry add`, `skillhub registry list`, `skillhub registry sync`, `skillhub registry index` |
 | Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
 | Lifecycle | `skillhub install`, `skillhub list`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |

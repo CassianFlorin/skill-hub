@@ -108,6 +108,41 @@ func TestVersionPrintsBuildVersion(t *testing.T) {
 	assertContains(t, stdout.String(), "skillhub ")
 }
 
+func TestHelpPrintsCommandOverview(t *testing.T) {
+	workspace := t.TempDir()
+	var stdout bytes.Buffer
+
+	runOK(t, workspace, &stdout, "help")
+
+	assertContains(t, stdout.String(), "usage: skillhub <command>")
+	assertContains(t, stdout.String(), "registry")
+	assertContains(t, stdout.String(), "deploy")
+	assertContains(t, stdout.String(), "Run \"skillhub help <command>\"")
+}
+
+func TestHelpRegistryPrintsRegistryUsage(t *testing.T) {
+	workspace := t.TempDir()
+	var stdout bytes.Buffer
+
+	runOK(t, workspace, &stdout, "help", "registry")
+
+	assertContains(t, stdout.String(), "usage: skillhub registry <add|list|sync|index>")
+	assertContains(t, stdout.String(), "skillhub registry add local")
+	assertContains(t, stdout.String(), "skillhub registry sync --all")
+}
+
+func TestHelpDeployPrintsDeployUsage(t *testing.T) {
+	workspace := t.TempDir()
+	var stdout bytes.Buffer
+
+	runOK(t, workspace, &stdout, "help", "deploy")
+
+	assertContains(t, stdout.String(), "usage: skillhub deploy <codex|claude|gemini>")
+	assertContains(t, stdout.String(), "--dry-run")
+	assertContains(t, stdout.String(), "--force")
+	assertContains(t, stdout.String(), "skillhub deploy status")
+}
+
 func TestDoctorShowsProjectAndRuntimeReadiness(t *testing.T) {
 	workspace := t.TempDir()
 	projectDir := filepath.Join(workspace, "project")
@@ -250,6 +285,23 @@ entry: SKILL.md
 	assertContains(t, err.Error(), "version 2.0.0 not available for platform/java-review")
 }
 
+func TestUnknownRegistrySuggestsRegistryList(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"install", "missing/java-review"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected unknown registry error")
+	}
+	assertContains(t, err.Error(), `unknown registry "missing"`)
+	assertContains(t, err.Error(), "skillhub registry list")
+}
+
 func TestInstallFromGitRegistryPinsTagAndRecordsCommit(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")
@@ -317,6 +369,35 @@ entry: SKILL.md
 	assertContains(t, stdout.String(), "rolled back platform/java-review to 1.2.0")
 	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.2.0")
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.2.0"`)
+}
+
+func TestRollbackWithoutHistorySuggestsCause(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"rollback", "local/my-skill"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected missing rollback history error")
+	}
+	assertContains(t, err.Error(), "no rollback history for local/my-skill")
+	assertContains(t, err.Error(), "install a newer version")
 }
 
 func TestRegistryAddLocalResolvesRelativePathsFromWorkDir(t *testing.T) {
@@ -1594,6 +1675,7 @@ entry: SKILL.md
 		t.Fatal("expected deploy conflict")
 	}
 	assertContains(t, err.Error(), "target already exists")
+	assertContains(t, err.Error(), "use --force")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "codex", "local/my-skill", "--force")
@@ -1694,6 +1776,23 @@ targets:
 	}
 	assertContains(t, err.Error(), `local/claude-only does not support runtime "codex"`)
 	assertPathMissing(t, filepath.Join(codexDir, "local__claude-only"))
+}
+
+func TestUnsupportedRuntimeListsSupportedNames(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+
+	stderr := &bytes.Buffer{}
+	err := Run([]string{"deploy", "openai"}, &stdout, stderr, projectDir)
+	if err == nil {
+		t.Fatal("expected unsupported runtime error")
+	}
+	assertContains(t, err.Error(), `unsupported runtime "openai"`)
+	assertContains(t, err.Error(), "supported runtimes: codex, claude, gemini")
 }
 
 func TestDeployBatchSkipsUnsupportedRuntimeTargets(t *testing.T) {

@@ -88,6 +88,7 @@ go build -o skillhub ./cmd/skillhub
 
 ```bash
 skillhub version
+skillhub help
 skillhub doctor
 skillhub init
 

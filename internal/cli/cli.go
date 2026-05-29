@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -23,6 +24,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return usage(stderr)
 	}
 	switch args[0] {
+	case "help":
+		return runHelp(args[1:], stdout)
 	case "version":
 		return runVersion(stdout)
 	case "doctor":
@@ -43,7 +46,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		}
 		locked, err := install.Install(workDir, args[1])
 		if err != nil {
-			return err
+			return withCLIHint(err)
 		}
 		_, _ = fmt.Fprintf(stdout, "installed %s@%s\n", locked.DisplayIdentity(), locked.Version)
 		return nil
@@ -65,6 +68,72 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 func runVersion(stdout io.Writer) error {
 	_, _ = fmt.Fprintf(stdout, "skillhub %s\n", Version)
 	return nil
+}
+
+const rootUsage = "usage: skillhub <command>"
+const registryUsage = "usage: skillhub registry <add|list|sync|index>"
+
+func deployUsage() string {
+	return fmt.Sprintf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
+}
+
+func supportedRuntimeList() string {
+	return strings.Join(deploy.RuntimeNames(), ", ")
+}
+
+func runHelp(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		_, _ = fmt.Fprintln(stdout, rootUsage)
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Commands:")
+		_, _ = fmt.Fprintln(stdout, "  version     Print the skillhub build version")
+		_, _ = fmt.Fprintln(stdout, "  doctor      Show local config and runtime readiness")
+		_, _ = fmt.Fprintln(stdout, "  init        Create skillhub.yaml in the current project")
+		_, _ = fmt.Fprintln(stdout, "  registry    Add, list, sync, and index registries")
+		_, _ = fmt.Fprintln(stdout, "  catalog     Browse synced registry catalog data")
+		_, _ = fmt.Fprintln(stdout, "  search      Search synced catalog data")
+		_, _ = fmt.Fprintln(stdout, "  info        Show one catalog Skill")
+		_, _ = fmt.Fprintln(stdout, "  install     Install a Skill from a path or registry")
+		_, _ = fmt.Fprintln(stdout, "  rollback    Restore the previous installed copy")
+		_, _ = fmt.Fprintln(stdout, "  uninstall   Remove an installed Skill")
+		_, _ = fmt.Fprintln(stdout, "  list        List installed Skills")
+		_, _ = fmt.Fprintln(stdout, "  update      Update installed Skills from their sources")
+		_, _ = fmt.Fprintln(stdout, "  deploy      Copy installed Skills into runtime directories")
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Run \"skillhub help <command>\" for command-specific usage.")
+		return nil
+	}
+	if len(args) > 1 {
+		return fmt.Errorf("usage: skillhub help [command]")
+	}
+	switch args[0] {
+	case "registry":
+		_, _ = fmt.Fprintln(stdout, registryUsage)
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Examples:")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry add local company ./examples/local-registry")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry add git team git@github.com:your-org/skills.git")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry list")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry sync hub")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry sync --all")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry index generate company")
+		_, _ = fmt.Fprintln(stdout, "  skillhub registry index validate company")
+		return nil
+	case "deploy":
+		_, _ = fmt.Fprintln(stdout, deployUsage())
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintf(stdout, "Runtimes: %s\n", supportedRuntimeList())
+		_, _ = fmt.Fprintln(stdout, "Options: --dry-run, --force")
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Examples:")
+		_, _ = fmt.Fprintln(stdout, "  skillhub deploy codex official/git-commit-cn")
+		_, _ = fmt.Fprintln(stdout, "  skillhub deploy codex official/git-commit-cn --dry-run")
+		_, _ = fmt.Fprintln(stdout, "  skillhub deploy codex official/git-commit-cn --force")
+		_, _ = fmt.Fprintln(stdout, "  skillhub deploy status")
+		return nil
+	default:
+		return fmt.Errorf("unknown help topic %q; run `skillhub help`", args[0])
+	}
 }
 
 func runDoctor(stdout io.Writer, workDir string) error {
@@ -135,7 +204,7 @@ func runRollback(args []string, stdout io.Writer) error {
 	}
 	locked, err := install.Rollback(args[0])
 	if err != nil {
-		return err
+		return withCLIHint(err)
 	}
 	_, _ = fmt.Fprintf(stdout, "rolled back %s to %s\n", locked.DisplayIdentity(), locked.Version)
 	return nil
@@ -155,7 +224,7 @@ func runInit(stdout io.Writer, workDir string) error {
 
 func runRegistry(args []string, stdout io.Writer, workDir string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: skillhub registry <add|list|sync|index>")
+		return errors.New(registryUsage)
 	}
 	switch args[0] {
 	case "add":
@@ -167,7 +236,7 @@ func runRegistry(args []string, stdout io.Writer, workDir string) error {
 	case "index":
 		return runRegistryIndex(args[1:], stdout, workDir)
 	default:
-		return fmt.Errorf("usage: skillhub registry <add|list|sync|index>")
+		return errors.New(registryUsage)
 	}
 }
 
@@ -213,7 +282,7 @@ func runRegistryIndex(args []string, stdout io.Writer, workDir string) error {
 	}
 	reg, ok := cfg.Registries[name]
 	if !ok {
-		return fmt.Errorf("unknown registry %q", name)
+		return withCLIHint(fmt.Errorf("unknown registry %q", name))
 	}
 	switch action {
 	case "generate":
@@ -266,7 +335,7 @@ func runRegistrySync(args []string, stdout io.Writer, workDir string) error {
 	}
 	reg, ok := cfg.Registries[args[0]]
 	if !ok {
-		return fmt.Errorf("unknown registry %q", args[0])
+		return withCLIHint(fmt.Errorf("unknown registry %q", args[0]))
 	}
 	count, err := registry.SyncRegistry(args[0], reg)
 	if err != nil {
@@ -784,7 +853,7 @@ func runUpdate(stdout io.Writer) error {
 
 func runDeploy(args []string, stdout io.Writer) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
+		return errors.New(deployUsage())
 	}
 	runtime := args[0]
 	if runtime == "status" {
@@ -799,7 +868,7 @@ func runDeploy(args []string, stdout io.Writer) error {
 			options.Force = true
 		default:
 			if options.Identity != "" {
-				return fmt.Errorf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
+				return errors.New(deployUsage())
 			}
 			options.Identity = arg
 		}
@@ -814,10 +883,10 @@ func runDeploy(args []string, stdout io.Writer) error {
 	case "gemini":
 		deployed, err = deploy.DeployGemini(options)
 	default:
-		return fmt.Errorf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
+		return fmt.Errorf("unsupported runtime %q; supported runtimes: %s", runtime, supportedRuntimeList())
 	}
 	if err != nil {
-		return err
+		return withCLIHint(err)
 	}
 	for _, result := range deployed {
 		_, _ = fmt.Fprintln(stdout, deployResultLine(result, runtime))
@@ -862,7 +931,25 @@ func runDeployStatus(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func withCLIHint(err error) error {
+	if err == nil {
+		return nil
+	}
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "unknown registry "):
+		return fmt.Errorf("%w\nhint: run `skillhub registry list` to see configured registries", err)
+	case strings.Contains(message, "target already exists"):
+		return fmt.Errorf("%w\nhint: use --force to overwrite the runtime copy, or remove the target directory first", err)
+	case strings.Contains(message, "no rollback history for "):
+		return fmt.Errorf("%w\nhint: install a newer version or reinstall the Skill once before rolling back", err)
+	default:
+		return err
+	}
+}
+
 func usage(stderr io.Writer) error {
-	_, _ = fmt.Fprintln(stderr, "usage: skillhub <version|doctor|init|registry|catalog|search|info|install|rollback|uninstall|list|update|deploy>")
+	_, _ = fmt.Fprintln(stderr, rootUsage)
+	_, _ = fmt.Fprintln(stderr, "run `skillhub help` for available commands")
 	return fmt.Errorf("invalid command")
 }
