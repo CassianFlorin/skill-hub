@@ -307,17 +307,18 @@ description: QNVIP project-only data fix SQL workflow.
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "list")
-	assertContains(t, stdout.String(), "global\tplatform/java-review\t1.2.0\tGlobal Java review skill")
-	assertContains(t, stdout.String(), "project\tproject/commerce-data-fix-sql\tunversioned\t.claude/skills/commerce-data-fix-sql")
+	assertContains(t, stdout.String(), "| Scope   | Skill                         | Version     | Location / Description               |")
+	assertContains(t, stdout.String(), "| global  | platform/java-review          | 1.2.0       | Global Java review skill             |")
+	assertContains(t, stdout.String(), "| project | project/commerce-data-fix-sql | unversioned | .claude/skills/commerce-data-fix-sql |")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "list", "--scope", "project")
-	assertContains(t, stdout.String(), "project\tproject/commerce-data-fix-sql")
+	assertContains(t, stdout.String(), "| project | project/commerce-data-fix-sql |")
 	assertNotContains(t, stdout.String(), "platform/java-review")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "list", "--scope", "global")
-	assertContains(t, stdout.String(), "global\tplatform/java-review")
+	assertContains(t, stdout.String(), "| global | platform/java-review |")
 	assertNotContains(t, stdout.String(), "commerce-data-fix-sql")
 }
 

@@ -1074,24 +1074,78 @@ func runList(args []string, stdout io.Writer, workDir string) error {
 		return err
 	}
 
-	wrote := false
+	var rows []skillListRow
 	if scope == "all" || scope == "global" {
 		for _, locked := range lock.Skills {
-			_, _ = fmt.Fprintf(stdout, "global\t%s\t%s\t%s\n", locked.DisplayIdentity(), locked.Version, locked.Description)
-			wrote = true
+			rows = append(rows, skillListRow{
+				Scope:    "global",
+				Skill:    locked.DisplayIdentity(),
+				Version:  locked.Version,
+				Location: locked.Description,
+			})
 		}
 	}
 	if scope == "all" || scope == "project" {
 		for _, discovered := range projectSkills {
-			_, _ = fmt.Fprintf(stdout, "project\t%s\t%s\t%s\n", discovered.Identity, discovered.Version, discovered.RelPath)
-			wrote = true
+			rows = append(rows, skillListRow{
+				Scope:    "project",
+				Skill:    discovered.Identity,
+				Version:  discovered.Version,
+				Location: discovered.RelPath,
+			})
 		}
 	}
-	if !wrote {
+	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(stdout, "no skills found")
 		return nil
 	}
+	_, _ = fmt.Fprint(stdout, formatSkillList(rows))
 	return nil
+}
+
+type skillListRow struct {
+	Scope    string
+	Skill    string
+	Version  string
+	Location string
+}
+
+func formatSkillList(rows []skillListRow) string {
+	headers := []string{"Scope", "Skill", "Version", "Location / Description"}
+	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3])}
+	for _, row := range rows {
+		widths[0] = max(widths[0], len(row.Scope))
+		widths[1] = max(widths[1], len(row.Skill))
+		widths[2] = max(widths[2], len(row.Version))
+		widths[3] = max(widths[3], len(row.Location))
+	}
+
+	var builder strings.Builder
+	writeSkillListSeparator(&builder, widths)
+	writeSkillListCells(&builder, headers, widths)
+	writeSkillListSeparator(&builder, widths)
+	for _, row := range rows {
+		writeSkillListCells(&builder, []string{row.Scope, row.Skill, row.Version, row.Location}, widths)
+	}
+	writeSkillListSeparator(&builder, widths)
+	return builder.String()
+}
+
+func writeSkillListSeparator(builder *strings.Builder, widths []int) {
+	builder.WriteByte('+')
+	for _, width := range widths {
+		builder.WriteString(strings.Repeat("-", width+2))
+		builder.WriteByte('+')
+	}
+	builder.WriteByte('\n')
+}
+
+func writeSkillListCells(builder *strings.Builder, cells []string, widths []int) {
+	builder.WriteByte('|')
+	for i, cell := range cells {
+		_, _ = fmt.Fprintf(builder, " %-*s |", widths[i], cell)
+	}
+	builder.WriteByte('\n')
 }
 
 func runUpdate(stdout io.Writer) error {
