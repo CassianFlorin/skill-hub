@@ -103,6 +103,7 @@ skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub deploy codex official/git-commit-cn --force
 skillhub deploy status
+skillhub tui
 ```
 
 To build a local binary without installing it:
@@ -120,6 +121,7 @@ go build -o skillhub ./cmd/skillhub
 | Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
 | Lifecycle | `skillhub install`, `skillhub list`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy status` |
+| Terminal UI | `skillhub tui` |
 | Publication | `skillhub catalog export` |
 
 Common examples:
@@ -141,6 +143,16 @@ skillhub help --lang zh-CN
 skillhub help list --lang zh-TW
 SKILLHUB_LANG=zh-CN skillhub help init
 ```
+
+## Terminal Management
+
+`skillhub tui` opens a terminal management interface for local Skills and synced catalog data. It shows global and project-only Skills side by side, deployment status for Codex, Claude, and Gemini, catalog search results, and operation logs.
+
+```bash
+skillhub tui
+```
+
+The TUI uses a mixed safety model: install, update, registry sync, and normal deploy run directly and write an operation log; uninstall, rollback, force deploy, registry deletion, and project Skill overwrite require confirmation.
 
 ## Catalog Discovery
 

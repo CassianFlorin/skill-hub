@@ -16,6 +16,7 @@ import (
 	"github.com/cassian/skill-hub/internal/install"
 	projectskills "github.com/cassian/skill-hub/internal/project"
 	"github.com/cassian/skill-hub/internal/registry"
+	"github.com/cassian/skill-hub/internal/tui"
 )
 
 var Version = "dev"
@@ -61,6 +62,11 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return runUpdate(stdout)
 	case "deploy":
 		return runDeploy(args[1:], stdout)
+	case "tui":
+		if len(args) != 1 {
+			return fmt.Errorf("usage: skillhub tui")
+		}
+		return tui.Run(workDir)
 	default:
 		return usage(stderr)
 	}
@@ -237,6 +243,7 @@ func englishHelp() helpMessages {
 			{"list", "List global and project Skills"},
 			{"update", "Update installed Skills from their sources"},
 			{"deploy", "Copy installed Skills into runtime directories"},
+			{"tui", "Open the terminal management interface"},
 		},
 		Topics: englishTopics(),
 	}
@@ -264,6 +271,7 @@ func simplifiedHelp() helpMessages {
 			{"list", "列出全局和项目 Skill"},
 			{"update", "从来源更新已安装 Skill"},
 			{"deploy", "复制已安装 Skill 到运行时目录"},
+			{"tui", "打开终端图形化管理界面"},
 		},
 		Topics: simplifiedTopics(),
 	}
@@ -291,6 +299,7 @@ func traditionalHelp() helpMessages {
 			{"list", "列出全域與專案 Skill"},
 			{"update", "從來源更新已安裝 Skill"},
 			{"deploy", "複製已安裝 Skill 到執行時目錄"},
+			{"tui", "開啟終端圖形化管理介面"},
 		},
 		Topics: traditionalTopics(),
 	}
@@ -311,6 +320,7 @@ func englishTopics() map[string]helpTopic {
 		"deploy":    {Usage: deployUsage(), Sections: []helpSection{{Title: "Runtimes:", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "Options:", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
 		"list":      {Usage: listUsage, Sections: []helpSection{{Title: "Scopes:", Lines: []string{"  --scope all      Show global installed Skills and project-only Skills", "  --scope global   Show Skills from $SKILLHUB_HOME/skillhub.lock", "  --scope project  Show Skills found in the current project"}}, {Title: "Project roots:", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"update":    {Usage: "usage: skillhub update", Description: "Update installed Skills from their recorded sources.", Examples: []string{"  skillhub update"}},
+		"tui":       {Usage: "usage: skillhub tui", Description: "Open the terminal management interface for local Skills, catalog browsing, deployment status, and operation logs.", Examples: []string{"  skillhub tui"}},
 	}
 }
 
@@ -329,6 +339,7 @@ func simplifiedTopics() map[string]helpTopic {
 		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Sections: []helpSection{{Title: "运行时：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "选项：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "范围：", Lines: []string{"  --scope all      显示全局已安装 Skill 和项目内 Skill", "  --scope global   显示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  显示当前项目中的 Skill"}}, {Title: "项目目录：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"update":    {Usage: "用法：skillhub update", Description: "从记录的来源更新已安装 Skill。", Examples: []string{"  skillhub update"}},
+		"tui":       {Usage: "用法：skillhub tui", Description: "打开终端图形化管理界面，用于本机 Skill 管理、目录浏览、部署状态和操作日志。", Examples: []string{"  skillhub tui"}},
 	}
 }
 
@@ -347,6 +358,7 @@ func traditionalTopics() map[string]helpTopic {
 		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Sections: []helpSection{{Title: "執行時：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "選項：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "範圍：", Lines: []string{"  --scope all      顯示全域已安裝 Skill 和專案內 Skill", "  --scope global   顯示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  顯示目前專案中的 Skill"}}, {Title: "專案目錄：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"update":    {Usage: "用法：skillhub update", Description: "從記錄的來源更新已安裝 Skill。", Examples: []string{"  skillhub update"}},
+		"tui":       {Usage: "用法：skillhub tui", Description: "開啟終端圖形化管理介面，用於本機 Skill 管理、目錄瀏覽、部署狀態和操作記錄。", Examples: []string{"  skillhub tui"}},
 	}
 }
 

@@ -117,6 +117,7 @@ func TestHelpPrintsCommandOverview(t *testing.T) {
 	assertContains(t, stdout.String(), "usage: skillhub <command>")
 	assertContains(t, stdout.String(), "registry")
 	assertContains(t, stdout.String(), "deploy")
+	assertContains(t, stdout.String(), "tui")
 	assertContains(t, stdout.String(), "Run \"skillhub help <command>\"")
 }
 
@@ -171,6 +172,7 @@ func TestHelpSupportsEveryListedCommand(t *testing.T) {
 		"list",
 		"update",
 		"deploy",
+		"tui",
 	}
 
 	for _, command := range commands {

@@ -127,12 +127,23 @@ skillhub list --scope project
 skillhub update
 skillhub rollback official/git-commit-cn
 skillhub uninstall official/git-commit-cn
+skillhub tui
 
 skillhub deploy codex
 skillhub deploy claude
 skillhub deploy gemini
 skillhub deploy status
 ```
+
+## 終端圖形化管理
+
+`skillhub tui` 會開啟終端圖形化管理介面，用於管理本機 Skills 和已同步的目錄資料。它會並排展示全域 Skills、專案內 Skills、Codex/Claude/Gemini 部署狀態、Catalog 搜尋結果和操作記錄。
+
+```bash
+skillhub tui
+```
+
+TUI 使用混合安全模式：install、update、registry sync 和一般 deploy 直接執行並記錄操作；uninstall、rollback、force deploy、刪除 registry、覆蓋專案 Skill 需要二次確認。
 
 ## Catalog 發現
 
