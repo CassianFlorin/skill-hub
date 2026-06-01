@@ -59,7 +59,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 	case "list":
 		return runList(args[1:], stdout, workDir)
 	case "update":
-		return runUpdate(stdout)
+		return runUpdate(args[1:], stdout)
 	case "deploy":
 		return runDeploy(args[1:], stdout)
 	case "tui":
@@ -317,10 +317,10 @@ func englishTopics() map[string]helpTopic {
 		"install":   {Usage: "usage: skillhub install <path|registry/skill>", Description: "Install a Skill from a local path, local registry, or Git registry.", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "usage: skillhub rollback <identity>", Description: "Restore the latest previous installed copy for an installed Skill.", Examples: []string{"  skillhub rollback platform-team/java-review"}},
 		"uninstall": {Usage: "usage: skillhub uninstall <identity> [--deployed]", Description: "Remove an installed Skill. Use --deployed to also remove runtime copies.", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
-		"deploy":    {Usage: deployUsage(), Sections: []helpSection{{Title: "Runtimes:", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "Options:", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
+		"deploy":    {Usage: deployUsage(), Description: "Deploy copies managed Skills into runtime directories. Use --force only when you intend to replace an existing runtime copy.", Sections: []helpSection{{Title: "Runtimes:", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "Options:", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
 		"list":      {Usage: listUsage, Sections: []helpSection{{Title: "Scopes:", Lines: []string{"  --scope all      Show global installed Skills and project-only Skills", "  --scope global   Show Skills from $SKILLHUB_HOME/skillhub.lock", "  --scope project  Show Skills found in the current project"}}, {Title: "Project roots:", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
-		"update":    {Usage: "usage: skillhub update", Description: "Update installed Skills from their recorded sources.", Examples: []string{"  skillhub update"}},
-		"tui":       {Usage: "usage: skillhub tui", Description: "Open the terminal management interface for local Skills, catalog browsing, deployment status, and operation logs.", Examples: []string{"  skillhub tui"}},
+		"update":    {Usage: "usage: skillhub update [--dry-run]", Description: "Update managed store copies from recorded sources. Runtime copies are not changed until deploy runs.", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
+		"tui":       {Usage: "usage: skillhub tui", Description: "Open the terminal management interface. Managed means skillhub can update and rollback; Runtime means the copy agents load.", Examples: []string{"  skillhub tui"}},
 	}
 }
 
@@ -336,10 +336,10 @@ func simplifiedTopics() map[string]helpTopic {
 		"install":   {Usage: "用法：skillhub install <路径|registry/skill>", Description: "从本地路径、本地注册表或 Git 注册表安装 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "恢复某个已安装 Skill 的最近一个历史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
 		"uninstall": {Usage: "用法：skillhub uninstall <identity> [--deployed]", Description: "移除已安装 Skill。使用 --deployed 可同时移除运行时副本。", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
-		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Sections: []helpSection{{Title: "运行时：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "选项：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
+		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才会修改运行时目录；--force 会覆盖已有运行时副本。", Sections: []helpSection{{Title: "运行时：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "选项：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "范围：", Lines: []string{"  --scope all      显示全局已安装 Skill 和项目内 Skill", "  --scope global   显示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  显示当前项目中的 Skill"}}, {Title: "项目目录：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
-		"update":    {Usage: "用法：skillhub update", Description: "从记录的来源更新已安装 Skill。", Examples: []string{"  skillhub update"}},
-		"tui":       {Usage: "用法：skillhub tui", Description: "打开终端图形化管理界面，用于本机 Skill 管理、目录浏览、部署状态和操作日志。", Examples: []string{"  skillhub tui"}},
+		"update":    {Usage: "用法：skillhub update [--dry-run]", Description: "只更新 skillhub 托管副本，不会修改 Codex、Claude 或 Gemini 运行时目录。", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
+		"tui":       {Usage: "用法：skillhub tui", Description: "打开终端图形化管理界面。Managed 表示 skillhub 可更新和回滚；Runtime 表示 Agent 实际加载的副本。", Examples: []string{"  skillhub tui"}},
 	}
 }
 
@@ -355,10 +355,10 @@ func traditionalTopics() map[string]helpTopic {
 		"install":   {Usage: "用法：skillhub install <路徑|registry/skill>", Description: "從本機路徑、本機註冊表或 Git 註冊表安裝 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "還原某個已安裝 Skill 的最近一個歷史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
 		"uninstall": {Usage: "用法：skillhub uninstall <identity> [--deployed]", Description: "移除已安裝 Skill。使用 --deployed 可同時移除執行時副本。", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
-		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Sections: []helpSection{{Title: "執行時：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "選項：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
+		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才會修改執行時目錄；--force 會覆蓋既有執行時副本。", Sections: []helpSection{{Title: "執行時：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "選項：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "範圍：", Lines: []string{"  --scope all      顯示全域已安裝 Skill 和專案內 Skill", "  --scope global   顯示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  顯示目前專案中的 Skill"}}, {Title: "專案目錄：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
-		"update":    {Usage: "用法：skillhub update", Description: "從記錄的來源更新已安裝 Skill。", Examples: []string{"  skillhub update"}},
-		"tui":       {Usage: "用法：skillhub tui", Description: "開啟終端圖形化管理介面，用於本機 Skill 管理、目錄瀏覽、部署狀態和操作記錄。", Examples: []string{"  skillhub tui"}},
+		"update":    {Usage: "用法：skillhub update [--dry-run]", Description: "只更新 skillhub 託管副本，不會修改 Codex、Claude 或 Gemini 執行時目錄。", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
+		"tui":       {Usage: "用法：skillhub tui", Description: "開啟終端圖形化管理介面。Managed 表示 skillhub 可更新和回滾；Runtime 表示 Agent 實際載入的副本。", Examples: []string{"  skillhub tui"}},
 	}
 }
 
@@ -1148,8 +1148,25 @@ func writeSkillListCells(builder *strings.Builder, cells []string, widths []int)
 	builder.WriteByte('\n')
 }
 
-func runUpdate(stdout io.Writer) error {
-	changes, err := install.UpdateAll()
+func runUpdate(args []string, stdout io.Writer) error {
+	dryRun := false
+	switch len(args) {
+	case 0:
+	case 1:
+		if args[0] != "--dry-run" {
+			return fmt.Errorf("usage: skillhub update [--dry-run]")
+		}
+		dryRun = true
+	default:
+		return fmt.Errorf("usage: skillhub update [--dry-run]")
+	}
+	var changes [][3]string
+	var err error
+	if dryRun {
+		changes, err = install.PlanUpdates()
+	} else {
+		changes, err = install.UpdateAll()
+	}
 	if err != nil {
 		return err
 	}
@@ -1158,7 +1175,16 @@ func runUpdate(stdout io.Writer) error {
 		return nil
 	}
 	for _, change := range changes {
+		if dryRun {
+			_, _ = fmt.Fprintf(stdout, "would update %s %s -> %s\n", change[0], change[1], change[2])
+			continue
+		}
 		_, _ = fmt.Fprintf(stdout, "updated %s %s -> %s\n", change[0], change[1], change[2])
+	}
+	if dryRun {
+		_, _ = fmt.Fprintln(stdout, "updates managed store only; runtime copies will not be changed")
+	} else {
+		_, _ = fmt.Fprintln(stdout, "runtime copies were not changed; run skillhub deploy status to inspect them")
 	}
 	return nil
 }

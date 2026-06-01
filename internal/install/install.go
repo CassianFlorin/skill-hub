@@ -222,8 +222,28 @@ func UpdateAll() ([][3]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	changes, err := updateLock(&lock, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := SaveLock(lock); err != nil {
+		return nil, err
+	}
+	return changes, nil
+}
+
+func PlanUpdates() ([][3]string, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return nil, err
+	}
+	return updateLock(&lock, true)
+}
+
+func updateLock(lock *LockFile, dryRun bool) ([][3]string, error) {
 	var changes [][3]string
 	for i, locked := range lock.Skills {
+		resolved := locked
 		if locked.SourceType == registry.SourceTypeGit {
 			cacheName := locked.SourceCache
 			sourceSubpath := locked.SourceSubpath
@@ -259,20 +279,32 @@ func UpdateAll() ([][3]string, error) {
 			if err != nil {
 				return nil, fmt.Errorf("update %s: %w", locked.Name, err)
 			}
-			locked.SourcePath = resolvedPath
-			lock.Skills[i].SourcePath = locked.SourcePath
-			lock.Skills[i].SourceCommit = commit
-			lock.Skills[i].SourceSubpath = filepath.ToSlash(sourceSubpath)
-			lock.Skills[i].SourceCache = cacheName
+			resolved.SourcePath = resolvedPath
+			resolved.SourceCommit = commit
+			resolved.SourceSubpath = filepath.ToSlash(sourceSubpath)
+			resolved.SourceCache = cacheName
+			if !dryRun {
+				lock.Skills[i].SourcePath = resolved.SourcePath
+				lock.Skills[i].SourceCommit = resolved.SourceCommit
+				lock.Skills[i].SourceSubpath = resolved.SourceSubpath
+				lock.Skills[i].SourceCache = resolved.SourceCache
+			}
 		}
-		meta, err := skill.LoadCompatibleMetadata(locked.SourcePath, locked.SourceRegistry)
+		meta, err := skill.LoadCompatibleMetadata(resolved.SourcePath, resolved.SourceRegistry)
 		if err != nil {
 			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
 		}
 		if meta.Version == locked.Version {
 			continue
 		}
-		if err := copyDir(locked.SourcePath, locked.InstalledPath); err != nil {
+		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})
+		if dryRun {
+			continue
+		}
+		if err := saveHistory(locked); err != nil {
+			return nil, err
+		}
+		if err := copyDir(resolved.SourcePath, locked.InstalledPath); err != nil {
 			return nil, err
 		}
 		if meta.Generated {
@@ -285,7 +317,6 @@ func UpdateAll() ([][3]string, error) {
 			return nil, err
 		}
 		identity := skill.Identity(meta.Namespace, meta.Name)
-		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})
 		lock.Skills[i].Identity = identity
 		lock.Skills[i].Name = meta.Name
 		lock.Skills[i].Namespace = meta.Namespace
@@ -294,9 +325,6 @@ func UpdateAll() ([][3]string, error) {
 		lock.Skills[i].Targets = meta.Targets
 		lock.Skills[i].Checksum = checksum
 		lock.Skills[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	if err := SaveLock(lock); err != nil {
-		return nil, err
 	}
 	return changes, nil
 }

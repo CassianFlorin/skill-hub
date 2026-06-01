@@ -36,6 +36,8 @@ func TestInitialModelShowsLocalSkills(t *testing.T) {
 	assertViewContains(t, view, "global")
 	assertViewContains(t, view, "project/commerce-data-fix-sql")
 	assertViewContains(t, view, "project")
+	assertViewContains(t, view, "Managed = skillhub can update and rollback")
+	assertViewContains(t, view, "Runtime = what agents load")
 }
 
 func TestModelTabsShowCatalogAndLogs(t *testing.T) {
