@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="skill-hub is a Skill package manager for AI agents. Install, update, roll back, and deploy Skills across Codex, Claude, and Gemini.">
+  <title>skill-hub | Skill package manager for AI agents</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="skill-hub home">
+      <span class="brand-mark">sh</span>
+      <span>skill-hub</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="#model">Model</a>
+      <a href="#features">Features</a>
+      <a href="#workflow">Workflow</a>
+      <a href="https://github.com/CassianFlorin/skill-hub">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Skill package manager for AI agents</p>
+        <h1>Manage Skills without guessing what will change.</h1>
+        <p class="lead">Install, version, update, roll back, and deploy Skills across Codex, Claude, and Gemini with explicit boundaries between managed packages and runtime copies.</p>
+        <div class="actions" aria-label="Primary actions">
+          <a class="button" href="#install">Install skillhub</a>
+          <a class="button ghost" href="https://github.com/CassianFlorin/skill-hub#quick-start">Read the docs</a>
+        </div>
+        <div class="install-command" id="install">
+          <code>brew tap CassianFlorin/tap &amp;&amp; brew install skillhub</code>
+        </div>
+      </div>
+
+      <div class="terminal" aria-label="skillhub command preview">
+        <div class="terminal-bar">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          local skill state
+        </div>
+        <div class="terminal-body">
+          <p class="command">$ skillhub update --dry-run</p>
+          <p class="output">would update official/git-commit-cn 0.1.0 -&gt; 0.1.1<br>updates managed store only; runtime copies will not be changed</p>
+          <p class="command">$ skillhub deploy status</p>
+          <p class="output">official/git-commit-cn&nbsp;&nbsp;codex&nbsp;&nbsp;drifted<br>official/git-commit-cn&nbsp;&nbsp;claude&nbsp;&nbsp;missing</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="model">
+      <div class="section-head">
+        <h2>Three layers. No hidden overwrites.</h2>
+        <p>skill-hub makes the local Skill model explicit before you run update, deploy, or force deploy.</p>
+      </div>
+      <div class="state-grid">
+        <article class="state">
+          <h3>Managed store</h3>
+          <p>Skills in <code>$SKILLHUB_HOME/installed</code> and <code>skillhub.lock</code> are tracked, updated, and rolled back by skill-hub.</p>
+        </article>
+        <article class="state">
+          <h3>Project discovered</h3>
+          <p>Skills found under project roots are visible in list and TUI views, but are not automatically adopted into the managed store.</p>
+        </article>
+        <article class="state">
+          <h3>Runtime copy</h3>
+          <p>Codex, Claude, and Gemini load these copies. Only <code>skillhub deploy</code> changes this layer.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band muted" id="features">
+      <div class="section-head">
+        <h2>Built for local control first.</h2>
+        <p>Use one CLI to discover packages, manage versions, inspect drift, and deploy into the agent runtime you actually use.</p>
+      </div>
+      <div class="features">
+        <article class="feature">
+          <h3>Registry discovery</h3>
+          <p>Browse local and Git-backed Skill registries, then inspect metadata before installing.</p>
+        </article>
+        <article class="feature">
+          <h3>Safe updates</h3>
+          <p>Preview update plans with <code>skillhub update --dry-run</code> and roll back managed copies when needed.</p>
+        </article>
+        <article class="feature">
+          <h3>Runtime deploy</h3>
+          <p>Copy selected Skills into Codex, Claude, or Gemini and use status checks to spot missing or drifted copies.</p>
+        </article>
+        <article class="feature">
+          <h3>Terminal UI</h3>
+          <p>Open <code>skillhub tui</code> to browse local Skills, catalog results, deployment status, and operation logs.</p>
+        </article>
+        <article class="feature">
+          <h3>Catalog export</h3>
+          <p>Publish static marketplace snapshots with searchable package metadata for teams or public catalogs.</p>
+        </article>
+        <article class="feature">
+          <h3>Multilingual help</h3>
+          <p>Command help is available in English, Simplified Chinese, and Traditional Chinese.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" id="workflow">
+      <div class="section-head">
+        <h2>Install to deploy in four steps.</h2>
+        <p>The core workflow stays terminal-native and auditable.</p>
+      </div>
+      <div class="flow">
+        <article class="step">
+          <strong>1. Initialize</strong>
+          <span>Set up registries and local state.</span>
+        </article>
+        <article class="step">
+          <strong>2. Discover</strong>
+          <span>Search catalog entries and inspect package metadata.</span>
+        </article>
+        <article class="step">
+          <strong>3. Install</strong>
+          <span>Track versions, source refs, checksums, and history.</span>
+        </article>
+        <article class="step">
+          <strong>4. Deploy</strong>
+          <span>Copy managed Skills into runtime directories.</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div>
+        <h2>Get the latest release.</h2>
+        <p>Install with Homebrew, npm, or download binaries from GitHub Releases.</p>
+      </div>
+      <div class="actions">
+        <a class="button" href="https://github.com/CassianFlorin/skill-hub/releases/latest">Latest release</a>
+        <a class="button ghost" href="https://www.npmjs.com/package/@cassianflorin/skillhub">npm package</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
