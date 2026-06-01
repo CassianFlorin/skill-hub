@@ -142,10 +142,11 @@ func (m Model) renderTabs() string {
 }
 
 func (m Model) renderLocal() string {
+	const boundaryHint = "Managed = skillhub can update and rollback. Project = discovered only. Runtime = what agents load."
 	if len(m.summary.Skills) == 0 {
-		return "Local\n\nNo local Skills found."
+		return "Local\n\n" + boundaryHint + "\n\nNo local Skills found."
 	}
-	rows := []string{"Local", "", "SCOPE    IDENTITY                         VERSION       RUNTIMES/PATH"}
+	rows := []string{"Local", "", boundaryHint, "", "SCOPE    IDENTITY                         VERSION       RUNTIMES/PATH"}
 	for i, skill := range m.summary.Skills {
 		right := skill.Path
 		if len(skill.RuntimeStates) > 0 {

@@ -256,6 +256,7 @@ func updateMessage(changes [][3]string) string {
 	for _, change := range changes {
 		parts = append(parts, change[0]+" "+change[1]+" -> "+change[2])
 	}
+	parts = append(parts, "runtime copies were not changed")
 	return strings.Join(parts, "; ")
 }
 

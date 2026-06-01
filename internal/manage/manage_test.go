@@ -121,6 +121,49 @@ func TestOperationConfirmationPolicy(t *testing.T) {
 	}
 }
 
+func TestUpdateOperationExplainsRuntimeCopiesAreUnchanged(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "home")
+	source := filepath.Join(workspace, "source", "java-review")
+	installed := filepath.Join(home, "installed", "platform__java-review")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	writeFile(t, filepath.Join(source, "skill.yaml"), `name: java-review
+namespace: platform
+version: 1.3.0
+entry: SKILL.md
+`)
+	writeFile(t, filepath.Join(source, "SKILL.md"), "# Java Review\n\nv1.3.0\n")
+	writeFile(t, filepath.Join(installed, "skill.yaml"), `name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+`)
+	writeFile(t, filepath.Join(installed, "SKILL.md"), "# Java Review\n\nv1.2.0\n")
+	writeFile(t, filepath.Join(home, "skillhub.lock"), `{
+  "skills": [
+    {
+      "identity": "platform/java-review",
+      "name": "java-review",
+      "namespace": "platform",
+      "version": "1.2.0",
+      "source_type": "local",
+      "source_path": "`+filepath.ToSlash(source)+`",
+      "installed_path": "`+filepath.ToSlash(installed)+`",
+      "updated_at": "2026-05-30T00:00:00Z"
+    }
+  ]
+}`)
+
+	result, err := Execute(workspace, OperationRequest{Kind: OperationUpdate})
+	if err != nil {
+		t.Fatalf("Execute update returned error: %v", err)
+	}
+
+	assertEqual(t, result.Command, "skillhub update", "command")
+	assertEqual(t, result.Message, "platform/java-review 1.2.0 -> 1.3.0; runtime copies were not changed", "message")
+}
+
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

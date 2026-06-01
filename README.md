@@ -19,9 +19,22 @@ Install, version, update, roll back, and deploy Skills across Codex, Claude, and
 
 Current release line: `v1.3.x`.
 
+## Does This Manage My Existing Skills?
+
+skill-hub separates local Skill state into three layers:
+
+| Layer | Location | Meaning | Agent impact |
+| --- | --- | --- | --- |
+| Managed store | `$SKILLHUB_HOME/installed` and `skillhub.lock` | Skills installed through `skillhub install`; these can be updated and rolled back. | No direct runtime impact. |
+| Project discovered | `.skillhub/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, `agent/skills` | Skills found in the current project; visible in list/TUI, but not automatically adopted into the managed store. | No direct runtime impact. |
+| Runtime copy | `~/.codex/skills`, `~/.claude/skills`, `~/.gemini/skills` | The copy Codex, Claude, or Gemini actually loads. | This affects the agent. |
+
+`skillhub update` updates the managed store only. It does not modify Codex, Claude, or Gemini runtime directories. Use `skillhub update --dry-run` to preview changes, `skillhub deploy status` to inspect runtime copies, and `skillhub deploy <runtime> ... --force` only when you intend to replace an existing runtime copy.
+
 ## Contents
 
 - [Why skill-hub](#why-skill-hub)
+- [Does This Manage My Existing Skills?](#does-this-manage-my-existing-skills)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Command Overview](#command-overview)
