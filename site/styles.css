@@ -85,6 +85,35 @@ code {
   color: var(--ink);
 }
 
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.language-switcher button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.language-switcher button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(17, 24, 39, .08);
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -138,6 +167,10 @@ h1 {
   margin: 0 0 22px;
   letter-spacing: 0;
   overflow-wrap: break-word;
+}
+
+html[lang^="zh"] h1 {
+  font-size: clamp(42px, 5.2vw, 64px);
 }
 
 .lead {
@@ -366,6 +399,10 @@ h1 {
     display: none;
   }
 
+  .nav-links {
+    gap: 14px;
+  }
+
   .hero {
     grid-template-columns: 1fr;
     min-height: auto;
@@ -404,7 +441,37 @@ h1 {
   }
 
   .nav {
+    height: auto;
+    min-height: 64px;
     padding: 0 16px;
+    gap: 10px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .brand {
+    gap: 9px;
+    flex: 0 0 auto;
+  }
+
+  .language-switcher {
+    width: 100%;
+    max-width: 358px;
+    margin-left: 0;
+    overflow-x: visible;
+    flex: 1 0 100%;
+  }
+
+  .language-switcher button {
+    flex: 1 1 0;
+    white-space: nowrap;
+  }
+
+  .language-switcher button {
+    padding-left: 7px;
+    padding-right: 7px;
   }
 
   .hero,
@@ -430,6 +497,10 @@ h1 {
   h1 {
     font-size: 34px;
     line-height: 1.05;
+  }
+
+  html[lang^="zh"] h1 {
+    font-size: 32px;
   }
 
   .lead {
