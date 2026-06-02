@@ -973,7 +973,8 @@ tags:
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "search", "review")
 
-	assertContains(t, stdout.String(), "company/platform/java-review\t1.2.0\tcodex\tprivate\t-")
+	assertTableRow(t, stdout.String(), "company/platform/java-review", "1.2.0", "codex", "private", "-", "Java review skill")
+	assertNotContains(t, stdout.String(), "\t")
 	assertContains(t, stdout.String(), "Java review skill")
 }
 
@@ -1013,7 +1014,8 @@ func TestSearchShowsTargetsAndMatchesTarget(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "search", "claude")
 
-	assertContains(t, stdout.String(), "company/platform/java-review\t1.2.0\tcodex,claude\tcurated\t-")
+	assertTableRow(t, stdout.String(), "company/platform/java-review", "1.2.0", "codex,claude", "curated", "-", "Java review skill")
+	assertNotContains(t, stdout.String(), "\t")
 	assertContains(t, stdout.String(), "Java review skill")
 }
 
@@ -1047,16 +1049,16 @@ tags:
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "info", "company/platform/java-review")
 
-	assertContains(t, stdout.String(), "identity: platform/java-review")
-	assertContains(t, stdout.String(), "registry: company")
-	assertContains(t, stdout.String(), "version: 1.2.0")
-	assertContains(t, stdout.String(), "targets: codex, claude")
-	assertContains(t, stdout.String(), "tags: java")
-	assertContains(t, stdout.String(), "source.type: registry")
-	assertContains(t, stdout.String(), "source.path: java-review")
-	assertContains(t, stdout.String(), "trust: private")
-	assertContains(t, stdout.String(), "install: skillhub install company/platform/java-review")
-	assertContains(t, stdout.String(), "checksum: sha256:")
+	assertTableRow(t, stdout.String(), "identity", "platform/java-review")
+	assertTableRow(t, stdout.String(), "registry", "company")
+	assertTableRow(t, stdout.String(), "version", "1.2.0")
+	assertTableRow(t, stdout.String(), "targets", "codex, claude")
+	assertTableRow(t, stdout.String(), "tags", "java")
+	assertTableRow(t, stdout.String(), "source.type", "registry")
+	assertTableRow(t, stdout.String(), "source.path", "java-review")
+	assertTableRow(t, stdout.String(), "trust", "private")
+	assertTableRow(t, stdout.String(), "install", "skillhub install company/platform/java-review")
+	assertContains(t, stdout.String(), "sha256:")
 }
 
 func TestInfoShowsReviewDetailsForOfficialSkill(t *testing.T) {
@@ -1097,9 +1099,9 @@ func TestInfoShowsReviewDetailsForOfficialSkill(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "info", "company/official/skill-authoring-guide")
 
-	assertContains(t, stdout.String(), "trust: official")
-	assertContains(t, stdout.String(), "trust.reviewed_at: 2026-05-27")
-	assertContains(t, stdout.String(), "trust.reviewer: CassianFlorin")
+	assertTableRow(t, stdout.String(), "trust", "official")
+	assertTableRow(t, stdout.String(), "trust.reviewed_at", "2026-05-27")
+	assertTableRow(t, stdout.String(), "trust.reviewer", "CassianFlorin")
 }
 
 func TestRegistryListShowsConfiguredRegistries(t *testing.T) {
@@ -1115,8 +1117,9 @@ func TestRegistryListShowsConfiguredRegistries(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "registry", "list")
 
-	assertContains(t, stdout.String(), "hub\tgit\thttps://github.com/CassianFlorin/skill-hub-registry.git")
-	assertContains(t, stdout.String(), "company\tlocal\t"+registryDir)
+	assertTableRow(t, stdout.String(), "hub", "git", "https://github.com/CassianFlorin/skill-hub-registry.git", "0", "")
+	assertTableRow(t, stdout.String(), "company", "local", registryDir, "0", "")
+	assertNotContains(t, stdout.String(), "\t")
 }
 
 func TestRegistrySyncValidatesLocalRegistryIndex(t *testing.T) {
@@ -1439,8 +1442,54 @@ func TestCatalogListSupportsFeaturedAndOfficialFilters(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "list", "--featured", "--official")
 
-	assertContains(t, stdout.String(), "company/official/skill-authoring-guide\t0.1.0\tcodex,claude\tofficial\tfeatured")
+	assertTableRow(t, stdout.String(), "company/official/skill-authoring-guide", "0.1.0", "codex,claude", "official", "featured", "Guide agents to create skill packages.")
+	assertNotContains(t, stdout.String(), "\t")
 	assertNotContains(t, stdout.String(), "community/git-helper")
+}
+
+func TestCatalogListUsesBoundedTableOutput(t *testing.T) {
+	workspace := t.TempDir()
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	t.Setenv("SKILLHUB_HOME", filepath.Join(workspace, "skillhub-home"))
+	t.Setenv("COLUMNS", "96")
+
+	mustWriteFile(t, filepath.Join(registryDir, "skillhub.index.json"), strings.TrimSpace(`
+{
+  "schema_version": "2",
+  "registry": "company",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "skills": [
+    {
+      "identity": "official/very-long-skill-name",
+      "name": "very-long-skill-name",
+      "namespace": "official",
+      "version": "0.1.0",
+      "description": "This description is intentionally long enough to prove catalog list renders a bounded table instead of allowing the terminal to wrap rows into unrelated output.",
+      "targets": ["codex", "claude", "gemini"],
+      "tags": ["catalog"],
+      "source": {"type": "git", "url": "https://example.com/skills.git", "path": "very-long-skill-name"},
+      "trust": {"level": "official"},
+      "featured": true,
+      "updated_at": "2026-05-27"
+    }
+  ]
+}
+`)+"\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "catalog", "list", "--registry", "company")
+
+	output := stdout.String()
+	assertContains(t, output, "| Skill")
+	assertContains(t, output, "| Description")
+	assertNotContains(t, output, "\t")
+	assertContains(t, output, "...")
+	assertAllLinesAtMost(t, output, 96)
 }
 
 func TestCatalogTagsAndTargetsShowAggregateCounts(t *testing.T) {
@@ -1458,24 +1507,25 @@ func TestCatalogTagsAndTargetsShowAggregateCounts(t *testing.T) {
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "tags", "--registry", "company")
-	assertContains(t, stdout.String(), "git\t1")
-	assertContains(t, stdout.String(), "review\t1")
-	assertContains(t, stdout.String(), "skill\t1")
+	assertTableRow(t, stdout.String(), "git", "1")
+	assertTableRow(t, stdout.String(), "review", "1")
+	assertTableRow(t, stdout.String(), "skill", "1")
+	assertNotContains(t, stdout.String(), "\t")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "targets", "--registry", "company")
-	assertContains(t, stdout.String(), "codex\t3")
-	assertContains(t, stdout.String(), "claude\t2")
+	assertTableRow(t, stdout.String(), "codex", "3")
+	assertTableRow(t, stdout.String(), "claude", "2")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "namespaces", "--registry", "company")
-	assertContains(t, stdout.String(), "official\t2")
-	assertContains(t, stdout.String(), "community\t1")
+	assertTableRow(t, stdout.String(), "official", "2")
+	assertTableRow(t, stdout.String(), "community", "1")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "catalog", "trust", "--registry", "company")
-	assertContains(t, stdout.String(), "official\t2")
-	assertContains(t, stdout.String(), "community\t1")
+	assertTableRow(t, stdout.String(), "official", "2")
+	assertTableRow(t, stdout.String(), "community", "1")
 }
 
 func TestCatalogTagsTargetsAndListSupportJSON(t *testing.T) {
@@ -1598,15 +1648,15 @@ func TestSearchJSONAndRankingPreferNameTagFeaturedOfficial(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "search", "git")
 
-	lines := nonEmptyLines(stdout.String())
-	if len(lines) < 2 {
+	rows := tableRows(t, stdout.String())
+	if len(rows) < 3 {
 		t.Fatalf("expected multiple search results, got %q", stdout.String())
 	}
-	if !strings.HasPrefix(lines[0], "company/official/git-commit-cn") {
-		t.Fatalf("expected name/tag official result first, got %q", lines[0])
+	if rows[1][0] != "company/official/git-commit-cn" {
+		t.Fatalf("expected name/tag official result first, got %#v", rows[1])
 	}
-	if !strings.HasPrefix(lines[1], "company/community/aaa-helper") {
-		t.Fatalf("expected description-only result after stronger match, got %q", lines[1])
+	if rows[2][0] != "company/community/aaa-helper" {
+		t.Fatalf("expected description-only result after stronger match, got %#v", rows[2])
 	}
 
 	stdout.Reset()
@@ -1634,11 +1684,11 @@ func TestInfoSupportsJSONAndReadableInstallDecisionFields(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "info", "company/official/git-commit-cn")
 
-	assertContains(t, stdout.String(), "install: skillhub install company/official/git-commit-cn")
-	assertContains(t, stdout.String(), "trust: official")
-	assertContains(t, stdout.String(), "trust.reviewed_at: 2026-05-27")
-	assertContains(t, stdout.String(), "targets: codex")
-	assertContains(t, stdout.String(), "tags: git, commit, chinese")
+	assertTableRow(t, stdout.String(), "install", "skillhub install company/official/git-commit-cn")
+	assertTableRow(t, stdout.String(), "trust", "official")
+	assertTableRow(t, stdout.String(), "trust.reviewed_at", "2026-05-27")
+	assertTableRow(t, stdout.String(), "targets", "codex")
+	assertTableRow(t, stdout.String(), "tags", "git, commit, chinese")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "info", "company/official/git-commit-cn", "--json")
@@ -2260,14 +2310,15 @@ entry: SKILL.md
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "status")
-	assertContains(t, stdout.String(), "local/my-skill\tcodex\tdeployed")
-	assertContains(t, stdout.String(), "local/my-skill\tclaude\tmissing")
-	assertContains(t, stdout.String(), "local/my-skill\tgemini\tmissing")
+	assertTableRow(t, stdout.String(), "local/my-skill", "codex", "deployed")
+	assertTableRow(t, stdout.String(), "local/my-skill", "claude", "missing")
+	assertTableRow(t, stdout.String(), "local/my-skill", "gemini", "missing")
+	assertNotContains(t, stdout.String(), "\t")
 
 	mustWriteFile(t, filepath.Join(codexDir, "local__my-skill", "SKILL.md"), "# Drifted\n")
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "status", "codex")
-	assertContains(t, stdout.String(), "local/my-skill\tcodex\tdrifted")
+	assertTableRow(t, stdout.String(), "local/my-skill", "codex", "drifted")
 }
 
 func TestDeployStatusReportsUnsupportedRuntimeTargets(t *testing.T) {
@@ -2297,19 +2348,19 @@ targets:
 	runOK(t, projectDir, &stdout, "install", localSkill)
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "status", "codex")
-	assertContains(t, stdout.String(), "local/claude-only\tcodex\tunsupported")
+	assertTableRow(t, stdout.String(), "local/claude-only", "codex", "unsupported")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "status")
-	assertContains(t, stdout.String(), "local/claude-only\tcodex\tunsupported")
-	assertContains(t, stdout.String(), "local/claude-only\tclaude\tmissing")
+	assertTableRow(t, stdout.String(), "local/claude-only", "codex", "unsupported")
+	assertTableRow(t, stdout.String(), "local/claude-only", "claude", "missing")
 
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "claude", "local/claude-only")
 	mustWriteFile(t, filepath.Join(claudeDir, "local__claude-only", "SKILL.md"), "# Drifted\n")
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "deploy", "status", "claude")
-	assertContains(t, stdout.String(), "local/claude-only\tclaude\tdrifted")
+	assertTableRow(t, stdout.String(), "local/claude-only", "claude", "drifted")
 }
 
 func TestUninstallRemovesInstalledSkillButKeepsDeployedCopyByDefault(t *testing.T) {
@@ -2574,6 +2625,55 @@ func assertNotContains(t *testing.T, got string, want string) {
 	t.Helper()
 	if strings.Contains(got, want) {
 		t.Fatalf("expected %q not to contain %q", got, want)
+	}
+}
+
+func assertTableRow(t *testing.T, got string, want ...string) {
+	t.Helper()
+	for _, row := range tableRows(t, got) {
+		if len(row) != len(want) {
+			continue
+		}
+		matched := true
+		for i := range want {
+			if row[i] != want[i] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return
+		}
+	}
+	t.Fatalf("expected table row %#v in:\n%s", want, got)
+}
+
+func tableRows(t *testing.T, got string) [][]string {
+	t.Helper()
+	var rows [][]string
+	for _, line := range strings.Split(got, "\n") {
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 3 {
+			continue
+		}
+		row := make([]string, 0, len(parts)-2)
+		for _, part := range parts[1 : len(parts)-1] {
+			row = append(row, strings.TrimSpace(part))
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func assertAllLinesAtMost(t *testing.T, got string, maxLen int) {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
+		if len(line) > maxLen {
+			t.Fatalf("expected line length <= %d, got %d for line:\n%s\nfull output:\n%s", maxLen, len(line), line, got)
+		}
 	}
 }
 

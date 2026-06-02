@@ -86,7 +86,7 @@ npm update -g @cassianflorin/skillhub
 Every tagged release also attaches an npm tarball. Use the release URL when you need to pin or mirror a specific release:
 
 ```bash
-VERSION=1.3.0
+VERSION=1.3.7
 npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${VERSION}/cassianflorin-skillhub-${VERSION}.tgz"
 ```
 
@@ -452,7 +452,7 @@ Tagged releases publish multi-platform archives through GitHub Actions. The same
 - `Formula/skillhub.rb` in this repository can be refreshed with `scripts/generate-homebrew-formula.sh` when cutting a release.
 
 ```bash
-NEXT_TAG=v1.3.3
+NEXT_TAG=v1.3.7
 git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
 git push origin "${NEXT_TAG}"
 ```
@@ -461,4 +461,4 @@ The npm package version is set from the Git tag during release. The package down
 
 Homebrew requires formulae to live in a tap. The checked-in `Formula/skillhub.rb` mirrors the latest release formula and is the source used for the `CassianFlorin/homebrew-tap` publication path.
 
-If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.3`.
+If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.7`.

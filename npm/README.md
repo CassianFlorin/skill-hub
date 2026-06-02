@@ -15,6 +15,6 @@ binary.
 To pin or mirror a specific GitHub Release tarball:
 
 ```bash
-VERSION=1.3.0
+VERSION=1.3.7
 npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${VERSION}/cassianflorin-skillhub-${VERSION}.tgz"
 ```

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cassian/skill-hub/internal/config"
@@ -534,9 +535,7 @@ func runRegistryList(stdout io.Writer, workDir string) error {
 	if err != nil {
 		return err
 	}
-	for _, status := range registry.ListRegistries(cfg) {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\t%d\t%s\n", status.Name, status.Type, status.Location, status.SkillCount, status.GeneratedAt)
-	}
+	_, _ = fmt.Fprint(stdout, formatRegistryList(registry.ListRegistries(cfg)))
 	return nil
 }
 
@@ -660,9 +659,7 @@ func runCatalogList(args []string, stdout io.Writer, workDir string, featuredOnl
 		_, _ = fmt.Fprintln(stdout, "no catalog skills found")
 		return nil
 	}
-	for _, result := range results {
-		_, _ = fmt.Fprintln(stdout, formatCatalogResult(result))
-	}
+	_, _ = fmt.Fprint(stdout, formatCatalogResults(results))
 	return nil
 }
 
@@ -699,9 +696,7 @@ func runCatalogAggregate(args []string, stdout io.Writer, workDir string, kind s
 		_, _ = fmt.Fprintf(stdout, "no catalog %s found\n", kind)
 		return nil
 	}
-	for _, count := range counts {
-		_, _ = fmt.Fprintf(stdout, "%s\t%d\n", count.Name, count.Count)
-	}
+	_, _ = fmt.Fprint(stdout, formatCatalogCounts(kind, counts))
 	return nil
 }
 
@@ -800,9 +795,7 @@ func runSearch(args []string, stdout io.Writer, workDir string) error {
 		_, _ = fmt.Fprintln(stdout, "no skills found")
 		return nil
 	}
-	for _, result := range results {
-		_, _ = fmt.Fprintln(stdout, formatCatalogResult(result))
-	}
+	_, _ = fmt.Fprint(stdout, formatCatalogResults(results))
 	return nil
 }
 
@@ -838,27 +831,7 @@ func runInfo(args []string, stdout io.Writer, workDir string) error {
 			InstallCommand: installCommand,
 		})
 	}
-	_, _ = fmt.Fprintf(stdout, "identity: %s\n", indexed.Identity)
-	_, _ = fmt.Fprintf(stdout, "registry: %s\n", result.Registry)
-	_, _ = fmt.Fprintf(stdout, "name: %s\n", indexed.Name)
-	_, _ = fmt.Fprintf(stdout, "namespace: %s\n", indexed.Namespace)
-	_, _ = fmt.Fprintf(stdout, "version: %s\n", indexed.Version)
-	_, _ = fmt.Fprintf(stdout, "description: %s\n", indexed.Description)
-	_, _ = fmt.Fprintf(stdout, "targets: %s\n", strings.Join(indexed.Targets, ", "))
-	_, _ = fmt.Fprintf(stdout, "tags: %s\n", strings.Join(indexed.Tags, ", "))
-	_, _ = fmt.Fprintf(stdout, "source.type: %s\n", indexed.Source.Type)
-	_, _ = fmt.Fprintf(stdout, "source.url: %s\n", indexed.Source.URL)
-	_, _ = fmt.Fprintf(stdout, "source.path: %s\n", indexed.Source.Path)
-	_, _ = fmt.Fprintf(stdout, "source.ref: %s\n", indexed.Source.Ref)
-	_, _ = fmt.Fprintf(stdout, "maintainers: %s\n", strings.Join(indexed.Maintainers, ", "))
-	_, _ = fmt.Fprintf(stdout, "license: %s\n", indexed.License)
-	_, _ = fmt.Fprintf(stdout, "trust: %s\n", indexed.Trust.Level)
-	_, _ = fmt.Fprintf(stdout, "trust.reviewed_at: %s\n", indexed.Trust.ReviewedAt)
-	_, _ = fmt.Fprintf(stdout, "trust.reviewer: %s\n", indexed.Trust.Reviewer)
-	_, _ = fmt.Fprintf(stdout, "featured: %t\n", indexed.Featured)
-	_, _ = fmt.Fprintf(stdout, "updated_at: %s\n", indexed.UpdatedAt)
-	_, _ = fmt.Fprintf(stdout, "checksum: %s\n", indexed.Checksum)
-	_, _ = fmt.Fprintf(stdout, "install: %s\n", installCommand)
+	_, _ = fmt.Fprint(stdout, formatInfoResult(result, installCommand))
 	return nil
 }
 
@@ -869,16 +842,80 @@ func featuredLabel(featured bool) string {
 	return "-"
 }
 
-func formatCatalogResult(result registry.SearchResult) string {
-	return fmt.Sprintf("%s/%s\t%s\t%s\t%s\t%s\t%s",
-		result.Registry,
-		result.Skill.Identity,
-		result.Skill.Version,
-		strings.Join(result.Skill.Targets, ","),
-		result.Skill.Trust.Level,
-		featuredLabel(result.Skill.Featured),
-		result.Skill.Description,
-	)
+func formatCatalogResults(results []registry.SearchResult) string {
+	rows := make([][]string, 0, len(results))
+	for _, result := range results {
+		rows = append(rows, []string{
+			fmt.Sprintf("%s/%s", result.Registry, result.Skill.Identity),
+			result.Skill.Version,
+			strings.Join(result.Skill.Targets, ","),
+			result.Skill.Trust.Level,
+			featuredLabel(result.Skill.Featured),
+			result.Skill.Description,
+		})
+	}
+	return formatTable([]string{"Skill", "Version", "Targets", "Trust", "Featured", "Description"}, rows)
+}
+
+func formatCatalogCounts(kind string, counts []catalogCount) string {
+	nameHeader := "Name"
+	switch kind {
+	case "tags":
+		nameHeader = "Tag"
+	case "targets":
+		nameHeader = "Target"
+	case "namespaces":
+		nameHeader = "Namespace"
+	case "trust":
+		nameHeader = "Trust"
+	}
+	rows := make([][]string, 0, len(counts))
+	for _, count := range counts {
+		rows = append(rows, []string{count.Name, strconv.Itoa(count.Count)})
+	}
+	return formatTable([]string{nameHeader, "Count"}, rows)
+}
+
+func formatRegistryList(statuses []registry.RegistryStatus) string {
+	rows := make([][]string, 0, len(statuses))
+	for _, status := range statuses {
+		rows = append(rows, []string{
+			status.Name,
+			status.Type,
+			status.Location,
+			strconv.Itoa(status.SkillCount),
+			status.GeneratedAt,
+		})
+	}
+	return formatTable([]string{"Name", "Type", "Location", "Skills", "Generated At"}, rows)
+}
+
+func formatInfoResult(result registry.SearchResult, installCommand string) string {
+	indexed := result.Skill
+	rows := [][]string{
+		{"identity", indexed.Identity},
+		{"registry", result.Registry},
+		{"name", indexed.Name},
+		{"namespace", indexed.Namespace},
+		{"version", indexed.Version},
+		{"description", indexed.Description},
+		{"targets", strings.Join(indexed.Targets, ", ")},
+		{"tags", strings.Join(indexed.Tags, ", ")},
+		{"source.type", indexed.Source.Type},
+		{"source.url", indexed.Source.URL},
+		{"source.path", indexed.Source.Path},
+		{"source.ref", indexed.Source.Ref},
+		{"maintainers", strings.Join(indexed.Maintainers, ", ")},
+		{"license", indexed.License},
+		{"trust", indexed.Trust.Level},
+		{"trust.reviewed_at", indexed.Trust.ReviewedAt},
+		{"trust.reviewer", indexed.Trust.Reviewer},
+		{"featured", fmt.Sprintf("%t", indexed.Featured)},
+		{"updated_at", indexed.UpdatedAt},
+		{"checksum", indexed.Checksum},
+		{"install", installCommand},
+	}
+	return formatTable([]string{"Field", "Value"}, rows)
 }
 
 type catalogJSONResult struct {
@@ -1111,27 +1148,100 @@ type skillListRow struct {
 }
 
 func formatSkillList(rows []skillListRow) string {
-	headers := []string{"Scope", "Skill", "Version", "Location / Description"}
-	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3])}
+	tableRows := make([][]string, 0, len(rows))
 	for _, row := range rows {
-		widths[0] = max(widths[0], len(row.Scope))
-		widths[1] = max(widths[1], len(row.Skill))
-		widths[2] = max(widths[2], len(row.Version))
-		widths[3] = max(widths[3], len(row.Location))
+		tableRows = append(tableRows, []string{row.Scope, row.Skill, row.Version, row.Location})
+	}
+	return formatTable([]string{"Scope", "Skill", "Version", "Location / Description"}, tableRows)
+}
+
+func formatTable(headers []string, rows [][]string) string {
+	if len(headers) == 0 {
+		return ""
+	}
+	widths := make([]int, len(headers))
+	minWidths := make([]int, len(headers))
+	for i, header := range headers {
+		widths[i] = cellWidth(header)
+		minWidths[i] = cellWidth(header)
+		if minWidths[i] < 3 {
+			minWidths[i] = 3
+		}
+	}
+	for _, row := range rows {
+		for i := range headers {
+			cell := ""
+			if i < len(row) {
+				cell = row[i]
+			}
+			if cellWidth(cell) > widths[i] {
+				widths[i] = cellWidth(cell)
+			}
+		}
+	}
+	if maxWidth := terminalTableWidth(); maxWidth > 0 {
+		shrinkTableWidths(widths, minWidths, maxWidth)
 	}
 
 	var builder strings.Builder
-	writeSkillListSeparator(&builder, widths)
-	writeSkillListCells(&builder, headers, widths)
-	writeSkillListSeparator(&builder, widths)
+	writeTableSeparator(&builder, widths)
+	writeTableCells(&builder, headers, widths)
+	writeTableSeparator(&builder, widths)
 	for _, row := range rows {
-		writeSkillListCells(&builder, []string{row.Scope, row.Skill, row.Version, row.Location}, widths)
+		cells := make([]string, len(headers))
+		for i := range headers {
+			if i < len(row) {
+				cells[i] = row[i]
+			}
+		}
+		writeTableCells(&builder, cells, widths)
 	}
-	writeSkillListSeparator(&builder, widths)
+	writeTableSeparator(&builder, widths)
 	return builder.String()
 }
 
-func writeSkillListSeparator(builder *strings.Builder, widths []int) {
+func terminalTableWidth() int {
+	columns := strings.TrimSpace(os.Getenv("COLUMNS"))
+	if columns == "" {
+		return 0
+	}
+	width, err := strconv.Atoi(columns)
+	if err != nil || width <= 0 {
+		return 0
+	}
+	if width < 40 {
+		return 40
+	}
+	return width
+}
+
+func shrinkTableWidths(widths []int, minWidths []int, maxWidth int) {
+	for tableLineWidth(widths) > maxWidth {
+		index := -1
+		for i, width := range widths {
+			if width <= minWidths[i] {
+				continue
+			}
+			if index == -1 || width > widths[index] {
+				index = i
+			}
+		}
+		if index == -1 {
+			return
+		}
+		widths[index]--
+	}
+}
+
+func tableLineWidth(widths []int) int {
+	width := 1
+	for _, columnWidth := range widths {
+		width += columnWidth + 3
+	}
+	return width
+}
+
+func writeTableSeparator(builder *strings.Builder, widths []int) {
 	builder.WriteByte('+')
 	for _, width := range widths {
 		builder.WriteString(strings.Repeat("-", width+2))
@@ -1140,12 +1250,34 @@ func writeSkillListSeparator(builder *strings.Builder, widths []int) {
 	builder.WriteByte('\n')
 }
 
-func writeSkillListCells(builder *strings.Builder, cells []string, widths []int) {
+func writeTableCells(builder *strings.Builder, cells []string, widths []int) {
 	builder.WriteByte('|')
 	for i, cell := range cells {
-		_, _ = fmt.Fprintf(builder, " %-*s |", widths[i], cell)
+		value := truncateTableCell(cell, widths[i])
+		builder.WriteByte(' ')
+		builder.WriteString(value)
+		builder.WriteString(strings.Repeat(" ", widths[i]-cellWidth(value)))
+		builder.WriteString(" |")
 	}
 	builder.WriteByte('\n')
+}
+
+func cellWidth(value string) int {
+	return len([]rune(value))
+}
+
+func truncateTableCell(value string, width int) string {
+	if cellWidth(value) <= width {
+		return value
+	}
+	if width <= 0 {
+		return ""
+	}
+	if width <= 3 {
+		return strings.Repeat(".", width)
+	}
+	runes := []rune(value)
+	return string(runes[:width-3]) + "..."
 }
 
 func runUpdate(args []string, stdout io.Writer) error {
@@ -1263,10 +1395,16 @@ func runDeployStatus(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	for _, status := range statuses {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", status.Identity, status.Runtime, status.State)
-	}
+	_, _ = fmt.Fprint(stdout, formatDeployStatus(statuses))
 	return nil
+}
+
+func formatDeployStatus(statuses []deploy.Status) string {
+	rows := make([][]string, 0, len(statuses))
+	for _, status := range statuses {
+		rows = append(rows, []string{status.Identity, status.Runtime, status.State})
+	}
+	return formatTable([]string{"Skill", "Runtime", "State"}, rows)
 }
 
 func withCLIHint(err error) error {
