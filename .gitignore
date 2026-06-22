@@ -4,6 +4,7 @@
 /docs/*
 !/docs/ARCHITECTURE.md
 !/docs/ROADMAP.md
+!/docs/LIFECYCLE_PLAN.md
 /.codegraph/
 /.superpowers/
 /.cursor/
