@@ -512,6 +512,73 @@ entry: SKILL.md
 	}
 }
 
+func TestHoldSkipsUpdatesUntilUnhold(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.2.0
+entry: SKILL.md
+targets:
+  - hermes
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.2.0\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "hold", "platform/java-review", "--reason", "1.2.0 works best")
+	assertContains(t, stdout.String(), "held platform/java-review")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"hold"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `1.2.0 works best`)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "holds")
+	assertContains(t, stdout.String(), "platform/java-review")
+	assertContains(t, stdout.String(), "1.2.0 works best")
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.Replace(readFile(t, filepath.Join(skillDir, "skill.yaml")), "version: 1.2.0", "version: 1.3.0", 1))
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.3.0\n")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "check")
+	assertContains(t, stdout.String(), "platform/java-review")
+	assertContains(t, stdout.String(), "held")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update", "--preview")
+	assertContains(t, stdout.String(), "platform/java-review 1.2.0 -> 1.3.0")
+	assertContains(t, stdout.String(), "Held: 1.2.0 works best")
+	assertContains(t, stdout.String(), "Skipped: held")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update")
+	assertContains(t, stdout.String(), "skipped held platform/java-review")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.2.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.2.0"`)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "unhold", "platform/java-review")
+	assertContains(t, stdout.String(), "unheld platform/java-review")
+	assertFileNotContains(t, filepath.Join(home, "skillhub.lock"), `"hold"`)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update", "platform/java-review")
+	assertContains(t, stdout.String(), "updated platform/java-review 1.2.0 -> 1.3.0")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.3.0")
+}
+
 func TestInstallFromLocalRegistryRequiresPinnedVersionToMatch(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")

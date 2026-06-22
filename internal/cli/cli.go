@@ -55,6 +55,12 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return nil
 	case "rollback":
 		return runRollback(args[1:], stdout)
+	case "hold":
+		return runHold(args[1:], stdout)
+	case "unhold":
+		return runUnhold(args[1:], stdout)
+	case "holds":
+		return runHolds(args[1:], stdout)
 	case "uninstall":
 		return runUninstall(args[1:], stdout)
 	case "list":
@@ -242,6 +248,9 @@ func englishHelp() helpMessages {
 			{"info", "Show one catalog Skill"},
 			{"install", "Install a Skill from a path or registry"},
 			{"rollback", "Restore the previous installed copy"},
+			{"hold", "Freeze an installed Skill at its current version"},
+			{"unhold", "Allow a held Skill to update again"},
+			{"holds", "List held Skills"},
 			{"uninstall", "Remove an installed Skill"},
 			{"list", "List global and project Skills"},
 			{"check", "Check installed Skills for available updates"},
@@ -271,6 +280,9 @@ func simplifiedHelp() helpMessages {
 			{"info", "显示一个目录 Skill"},
 			{"install", "从路径或注册表安装 Skill"},
 			{"rollback", "恢复上一个已安装副本"},
+			{"hold", "冻结已安装 Skill 的当前版本"},
+			{"unhold", "允许 held Skill 再次更新"},
+			{"holds", "列出 held Skills"},
 			{"uninstall", "移除已安装 Skill"},
 			{"list", "列出全局和项目 Skill"},
 			{"check", "检查已安装 Skill 是否有更新"},
@@ -300,6 +312,9 @@ func traditionalHelp() helpMessages {
 			{"info", "顯示一個目錄 Skill"},
 			{"install", "從路徑或註冊表安裝 Skill"},
 			{"rollback", "還原上一個已安裝副本"},
+			{"hold", "凍結已安裝 Skill 的目前版本"},
+			{"unhold", "允許 held Skill 再次更新"},
+			{"holds", "列出 held Skills"},
 			{"uninstall", "移除已安裝 Skill"},
 			{"list", "列出全域與專案 Skill"},
 			{"check", "檢查已安裝 Skill 是否有更新"},
@@ -322,6 +337,9 @@ func englishTopics() map[string]helpTopic {
 		"info":      {Usage: "usage: skillhub info <registry/identity|identity> [--json]", Description: "Show details for one catalog Skill from synced registry indexes.", Examples: []string{"  skillhub info hub/official/git-commit-cn", "  skillhub info official/git-commit-cn --json"}},
 		"install":   {Usage: "usage: skillhub install <path|registry/skill>", Description: "Install a Skill from a local path, local registry, or Git registry.", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "usage: skillhub rollback <identity>", Description: "Restore the latest previous installed copy for an installed Skill.", Examples: []string{"  skillhub rollback platform-team/java-review"}},
+		"hold":      {Usage: "usage: skillhub hold <identity> [--reason <text>]", Description: "Freeze an installed Skill at its current version so update skips it.", Examples: []string{"  skillhub hold platform-team/java-review --reason '1.2.0 works best'"}},
+		"unhold":    {Usage: "usage: skillhub unhold <identity>", Description: "Allow a held Skill to update again.", Examples: []string{"  skillhub unhold platform-team/java-review"}},
+		"holds":     {Usage: "usage: skillhub holds", Description: "List Skills currently held from update.", Examples: []string{"  skillhub holds"}},
 		"uninstall": {Usage: "usage: skillhub uninstall <identity> [--deployed]", Description: "Remove an installed Skill. Use --deployed to also remove runtime copies.", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
 		"deploy":    {Usage: deployUsage(), Description: "Deploy copies managed Skills into runtime directories. Use --force only when you intend to replace an existing runtime copy.", Sections: []helpSection{{Title: "Runtimes:", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "Options:", Lines: []string{"  --dry-run, --force, --profile <name>"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy hermes official/git-commit-cn --profile work", "  skillhub deploy status"}},
 		"list":      {Usage: listUsage, Sections: []helpSection{{Title: "Scopes:", Lines: []string{"  --scope all      Show global installed Skills and project-only Skills", "  --scope global   Show Skills from $SKILLHUB_HOME/skillhub.lock", "  --scope project  Show Skills found in the current project"}}, {Title: "Project roots:", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
@@ -342,6 +360,9 @@ func simplifiedTopics() map[string]helpTopic {
 		"info":      {Usage: "用法：skillhub info <registry/identity|identity> [--json]", Description: "显示一个目录 Skill 的详细信息。", Examples: []string{"  skillhub info hub/official/git-commit-cn", "  skillhub info official/git-commit-cn --json"}},
 		"install":   {Usage: "用法：skillhub install <路径|registry/skill>", Description: "从本地路径、本地注册表或 Git 注册表安装 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "恢复某个已安装 Skill 的最近一个历史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
+		"hold":      {Usage: "用法：skillhub hold <identity> [--reason <文本>]", Description: "冻结已安装 Skill 的当前版本，update 会跳过它。", Examples: []string{"  skillhub hold platform-team/java-review --reason '1.2.0 效果最好'"}},
+		"unhold":    {Usage: "用法：skillhub unhold <identity>", Description: "允许 held Skill 再次更新。", Examples: []string{"  skillhub unhold platform-team/java-review"}},
+		"holds":     {Usage: "用法：skillhub holds", Description: "列出当前被 hold 的 Skills。", Examples: []string{"  skillhub holds"}},
 		"uninstall": {Usage: "用法：skillhub uninstall <identity> [--deployed]", Description: "移除已安装 Skill。使用 --deployed 可同时移除运行时副本。", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
 		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才会修改运行时目录；--force 会覆盖已有运行时副本。", Sections: []helpSection{{Title: "运行时：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "选项：", Lines: []string{"  --dry-run, --force, --profile <name>"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy hermes official/git-commit-cn --profile work", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "范围：", Lines: []string{"  --scope all      显示全局已安装 Skill 和项目内 Skill", "  --scope global   显示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  显示当前项目中的 Skill"}}, {Title: "项目目录：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
@@ -362,6 +383,9 @@ func traditionalTopics() map[string]helpTopic {
 		"info":      {Usage: "用法：skillhub info <registry/identity|identity> [--json]", Description: "顯示一個目錄 Skill 的詳細資訊。", Examples: []string{"  skillhub info hub/official/git-commit-cn", "  skillhub info official/git-commit-cn --json"}},
 		"install":   {Usage: "用法：skillhub install <路徑|registry/skill>", Description: "從本機路徑、本機註冊表或 Git 註冊表安裝 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "還原某個已安裝 Skill 的最近一個歷史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
+		"hold":      {Usage: "用法：skillhub hold <identity> [--reason <文字>]", Description: "凍結已安裝 Skill 的目前版本，update 會跳過它。", Examples: []string{"  skillhub hold platform-team/java-review --reason '1.2.0 效果最好'"}},
+		"unhold":    {Usage: "用法：skillhub unhold <identity>", Description: "允許 held Skill 再次更新。", Examples: []string{"  skillhub unhold platform-team/java-review"}},
+		"holds":     {Usage: "用法：skillhub holds", Description: "列出目前被 hold 的 Skills。", Examples: []string{"  skillhub holds"}},
 		"uninstall": {Usage: "用法：skillhub uninstall <identity> [--deployed]", Description: "移除已安裝 Skill。使用 --deployed 可同時移除執行時副本。", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
 		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才會修改執行時目錄；--force 會覆蓋既有執行時副本。", Sections: []helpSection{{Title: "執行時：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "選項：", Lines: []string{"  --dry-run, --force, --profile <name>"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy hermes official/git-commit-cn --profile work", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "範圍：", Lines: []string{"  --scope all      顯示全域已安裝 Skill 和專案內 Skill", "  --scope global   顯示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  顯示目前專案中的 Skill"}}, {Title: "專案目錄：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
@@ -400,6 +424,67 @@ func runDoctor(stdout io.Writer, workDir string) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "installed: %d\n", len(lock.Skills))
+	return nil
+}
+
+func runHold(args []string, stdout io.Writer) error {
+	if len(args) != 1 && len(args) != 3 {
+		return fmt.Errorf("usage: skillhub hold <identity> [--reason <text>]")
+	}
+	reason := ""
+	if len(args) == 3 {
+		if args[1] != "--reason" {
+			return fmt.Errorf("usage: skillhub hold <identity> [--reason <text>]")
+		}
+		reason = args[2]
+	}
+	locked, err := install.Hold(args[0], reason)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		_, _ = fmt.Fprintf(stdout, "held %s: %s\n", locked.DisplayIdentity(), reason)
+		return nil
+	}
+	_, _ = fmt.Fprintf(stdout, "held %s\n", locked.DisplayIdentity())
+	return nil
+}
+
+func runUnhold(args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillhub unhold <identity>")
+	}
+	locked, err := install.Unhold(args[0])
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "unheld %s\n", locked.DisplayIdentity())
+	return nil
+}
+
+func runHolds(args []string, stdout io.Writer) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: skillhub holds")
+	}
+	held, err := install.HeldSkills()
+	if err != nil {
+		return err
+	}
+	if len(held) == 0 {
+		_, _ = fmt.Fprintln(stdout, "no held skills")
+		return nil
+	}
+	rows := make([][]string, 0, len(held))
+	for _, locked := range held {
+		reason := ""
+		created := ""
+		if locked.Hold != nil {
+			reason = locked.Hold.Reason
+			created = locked.Hold.CreatedAt
+		}
+		rows = append(rows, []string{locked.DisplayIdentity(), locked.Version, reason, created})
+	}
+	_, _ = fmt.Fprint(stdout, formatTable([]string{"Skill", "Version", "Reason", "Held At"}, rows))
 	return nil
 }
 
@@ -1332,6 +1417,7 @@ func runUpdate(args []string, stdout io.Writer) error {
 	}
 	var changes [][3]string
 	var err error
+	plans, planErr := install.PlanUpdateDetails(install.UpdateOptions{Identity: identity})
 	if identity != "" {
 		changes, err = install.UpdateOne(identity)
 	} else {
@@ -1340,9 +1426,13 @@ func runUpdate(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(changes) == 0 {
+	heldSkipped := heldUpdatePlans(plans, planErr)
+	if len(changes) == 0 && len(heldSkipped) == 0 {
 		_, _ = fmt.Fprintln(stdout, "all skills are current")
 		return nil
+	}
+	for _, plan := range heldSkipped {
+		_, _ = fmt.Fprintf(stdout, "skipped held %s\n", plan.Identity)
 	}
 	for _, change := range changes {
 		_, _ = fmt.Fprintf(stdout, "updated %s %s -> %s\n", change[0], change[1], change[2])
@@ -1352,12 +1442,29 @@ func runUpdate(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func heldUpdatePlans(plans []install.UpdatePlan, err error) []install.UpdatePlan {
+	if err != nil {
+		return nil
+	}
+	var held []install.UpdatePlan
+	for _, plan := range plans {
+		if plan.Held {
+			held = append(held, plan)
+		}
+	}
+	return held
+}
+
 func formatUpdatePlanTable(plans []install.UpdatePlan) string {
 	rows := make([][]string, 0, len(plans))
 	for _, plan := range plans {
-		rows = append(rows, []string{plan.Identity, plan.CurrentVersion, plan.AvailableVersion, updatePlanSource(plan)})
+		policy := "update"
+		if plan.Held {
+			policy = "held"
+		}
+		rows = append(rows, []string{plan.Identity, plan.CurrentVersion, plan.AvailableVersion, policy, updatePlanSource(plan)})
 	}
-	return formatTable([]string{"Skill", "Current", "Available", "Source"}, rows)
+	return formatTable([]string{"Skill", "Current", "Available", "Policy", "Source"}, rows)
 }
 
 func printUpdatePreview(stdout io.Writer, plans []install.UpdatePlan) error {
@@ -1378,6 +1485,14 @@ func printUpdatePreview(stdout io.Writer, plans []install.UpdatePlan) error {
 		}
 		if len(plan.DeployedTo) > 0 {
 			_, _ = fmt.Fprintf(stdout, "  Deployed runtimes: %s\n", strings.Join(plan.DeployedTo, ", "))
+		}
+		if plan.Held {
+			if plan.HoldReason != "" {
+				_, _ = fmt.Fprintf(stdout, "  Held: %s\n", plan.HoldReason)
+			} else {
+				_, _ = fmt.Fprintln(stdout, "  Held: yes")
+			}
+			_, _ = fmt.Fprintln(stdout, "  Skipped: held")
 		}
 		_, _ = fmt.Fprintf(stdout, "  Update one Skill: skillhub update %s\n", plan.Identity)
 		_, _ = fmt.Fprintf(stdout, "  Roll back after update: skillhub rollback %s\n", plan.Identity)
