@@ -23,24 +23,30 @@ type LockFile struct {
 }
 
 type LockedSkill struct {
-	Identity       string   `json:"identity"`
-	Name           string   `json:"name"`
-	Namespace      string   `json:"namespace"`
-	Version        string   `json:"version"`
-	Description    string   `json:"description,omitempty"`
-	SourceType     string   `json:"source_type"`
-	SourceRegistry string   `json:"source_registry,omitempty"`
-	SourceURL      string   `json:"source_url,omitempty"`
-	SourceRef      string   `json:"source_ref,omitempty"`
-	SourceCommit   string   `json:"source_commit,omitempty"`
-	SourcePath     string   `json:"source_path"`
-	SourceSubpath  string   `json:"source_subpath,omitempty"`
-	SourceCache    string   `json:"source_cache,omitempty"`
-	Checksum       string   `json:"checksum,omitempty"`
-	InstalledPath  string   `json:"installed_path"`
-	Targets        []string `json:"targets,omitempty"`
-	DeployedTo     []string `json:"deployed_runtimes,omitempty"`
-	UpdatedAt      string   `json:"updated_at"`
+	Identity       string     `json:"identity"`
+	Name           string     `json:"name"`
+	Namespace      string     `json:"namespace"`
+	Version        string     `json:"version"`
+	Description    string     `json:"description,omitempty"`
+	SourceType     string     `json:"source_type"`
+	SourceRegistry string     `json:"source_registry,omitempty"`
+	SourceURL      string     `json:"source_url,omitempty"`
+	SourceRef      string     `json:"source_ref,omitempty"`
+	SourceCommit   string     `json:"source_commit,omitempty"`
+	SourcePath     string     `json:"source_path"`
+	SourceSubpath  string     `json:"source_subpath,omitempty"`
+	SourceCache    string     `json:"source_cache,omitempty"`
+	Checksum       string     `json:"checksum,omitempty"`
+	InstalledPath  string     `json:"installed_path"`
+	Targets        []string   `json:"targets,omitempty"`
+	DeployedTo     []string   `json:"deployed_runtimes,omitempty"`
+	Hold           *HoldState `json:"hold,omitempty"`
+	UpdatedAt      string     `json:"updated_at"`
+}
+
+type HoldState struct {
+	Reason    string `json:"reason,omitempty"`
+	CreatedAt string `json:"created_at"`
 }
 
 type UpdateOptions struct {
@@ -59,6 +65,8 @@ type UpdatePlan struct {
 	AvailablePath    string
 	Targets          []string
 	DeployedTo       []string
+	Held             bool
+	HoldReason       string
 }
 
 func LockPath() (string, error) {
@@ -235,6 +243,56 @@ func (l *LockFile) remove(identity string) {
 	l.Skills = kept
 }
 
+func Hold(identity string, reason string) (LockedSkill, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return LockedSkill{}, err
+	}
+	for i, locked := range lock.Skills {
+		if locked.DisplayIdentity() != identity && locked.Name != identity {
+			continue
+		}
+		lock.Skills[i].Hold = &HoldState{Reason: reason, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
+		if err := SaveLock(lock); err != nil {
+			return LockedSkill{}, err
+		}
+		return lock.Skills[i], nil
+	}
+	return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
+}
+
+func Unhold(identity string) (LockedSkill, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return LockedSkill{}, err
+	}
+	for i, locked := range lock.Skills {
+		if locked.DisplayIdentity() != identity && locked.Name != identity {
+			continue
+		}
+		lock.Skills[i].Hold = nil
+		if err := SaveLock(lock); err != nil {
+			return LockedSkill{}, err
+		}
+		return lock.Skills[i], nil
+	}
+	return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
+}
+
+func HeldSkills() ([]LockedSkill, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return nil, err
+	}
+	var held []LockedSkill
+	for _, locked := range lock.Skills {
+		if locked.Hold != nil {
+			held = append(held, locked)
+		}
+	}
+	return held, nil
+}
+
 func UpdateAll() ([][3]string, error) {
 	lock, err := LoadLock()
 	if err != nil {
@@ -306,7 +364,7 @@ func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, erro
 		if meta.Version == locked.Version {
 			continue
 		}
-		plans = append(plans, UpdatePlan{
+		plan := UpdatePlan{
 			Identity:         identity,
 			CurrentVersion:   locked.Version,
 			AvailableVersion: meta.Version,
@@ -318,7 +376,12 @@ func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, erro
 			AvailablePath:    resolved.SourcePath,
 			Targets:          meta.Targets,
 			DeployedTo:       locked.DeployedTo,
-		})
+		}
+		if locked.Hold != nil {
+			plan.Held = true
+			plan.HoldReason = locked.Hold.Reason
+		}
+		plans = append(plans, plan)
 	}
 	if options.Identity != "" && len(plans) == 0 {
 		if _, ok := lock.find(options.Identity); !ok {
@@ -353,6 +416,9 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
 		}
 		if meta.Version == locked.Version {
+			continue
+		}
+		if locked.Hold != nil {
 			continue
 		}
 		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})

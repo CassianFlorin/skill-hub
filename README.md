@@ -132,7 +132,7 @@ go build -o skillhub ./cmd/skillhub
 | Project setup | `skillhub help`, `skillhub version`, `skillhub doctor`, `skillhub init` |
 | Registries | `skillhub registry add`, `skillhub registry list`, `skillhub registry sync`, `skillhub registry index` |
 | Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
-| Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
+| Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub hold`, `skillhub holds`, `skillhub unhold`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
 | Publication | `skillhub catalog export` |
@@ -250,12 +250,25 @@ For local registries, the pinned value must match the Skill metadata version. Fo
 Update awareness and safe preview:
 
 ```bash
-./skillhub check
-./skillhub update --preview
-./skillhub update --dry-run   # compatibility alias for --preview
+skillhub check
+skillhub update --preview
+skillhub hold official/git-commit-cn --reason "this version works best"
+skillhub holds
+skillhub unhold official/git-commit-cn
+skillhub update
 ```
 
 `skillhub check` reports installed Skills with newer source versions without changing files. `skillhub update --preview` shows the version transition, source, targets, deployed runtimes, and rollback command before any write.
+
+Freeze a Skill that should not be updated yet:
+
+```bash
+./skillhub hold platform-team/java-review --reason "1.2.0 works best"
+./skillhub holds
+./skillhub unhold platform-team/java-review
+```
+
+Held Skills still appear in `skillhub check` and `skillhub update --preview` with policy `held`, but `skillhub update` skips them until `unhold` is run.
 
 Update and rollback:
 

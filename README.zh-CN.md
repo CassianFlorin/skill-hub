@@ -126,6 +126,9 @@ skillhub list --scope all
 skillhub list --scope project
 skillhub check
 skillhub update --preview
+skillhub hold official/git-commit-cn --reason "这个版本效果最好"
+skillhub holds
+skillhub unhold official/git-commit-cn
 skillhub update
 skillhub rollback official/git-commit-cn
 skillhub uninstall official/git-commit-cn
@@ -237,6 +240,16 @@ skillhub update --dry-run   # 兼容旧用法，等同于 --preview
 ```
 
 `skillhub check` 只检查已安装 Skill 是否有新的来源版本，不会修改任何文件。`skillhub update --preview` 会在写入前展示版本变化、来源、targets、已部署运行时和回滚命令。
+
+冻结暂时不想更新的 Skill：
+
+```bash
+skillhub hold platform-team/java-review --reason "1.2.0 效果最好"
+skillhub holds
+skillhub unhold platform-team/java-review
+```
+
+被 hold 的 Skills 仍会出现在 `skillhub check` 和 `skillhub update --preview` 中，policy 显示为 `held`，但 `skillhub update` 会跳过它们，直到执行 `unhold`。
 
 更新和回滚：
 
