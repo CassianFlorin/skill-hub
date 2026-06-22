@@ -132,7 +132,7 @@ go build -o skillhub ./cmd/skillhub
 | Project setup | `skillhub help`, `skillhub version`, `skillhub doctor`, `skillhub init` |
 | Registries | `skillhub registry add`, `skillhub registry list`, `skillhub registry sync`, `skillhub registry index` |
 | Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
-| Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub hold`, `skillhub holds`, `skillhub unhold`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
+| Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub hold`, `skillhub holds`, `skillhub unhold`, `skillhub update`, `skillhub history`, `skillhub rollback`, `skillhub uninstall` |
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
 | Publication | `skillhub catalog export` |
@@ -275,10 +275,12 @@ Update and rollback:
 ```bash
 ./skillhub update platform-team/java-review
 ./skillhub update
-./skillhub rollback platform-team/java-review
+./skillhub history platform-team/java-review
+./skillhub rollback platform-team/java-review --to 1.2.0
+./skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work
 ```
 
-For git registries, `skillhub update` refreshes the cached repository with `git pull --ff-only` and updates installed Skills when their `skill.yaml` version changes. Rollback restores the latest previous installed copy and updates `skillhub.lock`. Runtime copies are not changed by update or rollback; run `skillhub deploy status` and then `skillhub deploy <runtime> ... --force` when you intentionally want to replace what an agent loads.
+For git registries, `skillhub update` refreshes the cached repository with `git pull --ff-only` and updates installed Skills when their `skill.yaml` version changes. `skillhub history <identity>` lists rollback snapshots saved before updates or reinstalls. `skillhub rollback <identity>` restores the latest previous installed copy, while `--to <version>` selects a specific history version. Runtime copies are not changed by update or rollback unless you pass `--deploy <runtime>`; for example, `skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work` restores the managed copy and immediately redeploys the Hermes profile copy with force semantics.
 
 Uninstall:
 

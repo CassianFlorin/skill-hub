@@ -130,7 +130,9 @@ skillhub hold official/git-commit-cn --reason "這個版本效果最好"
 skillhub holds
 skillhub unhold official/git-commit-cn
 skillhub update
-skillhub rollback official/git-commit-cn
+skillhub history official/git-commit-cn
+skillhub rollback official/git-commit-cn --to 0.1.0
+skillhub rollback official/git-commit-cn --to 0.1.0 --deploy hermes --profile work
 skillhub uninstall official/git-commit-cn
 skillhub tui
 
@@ -256,10 +258,12 @@ skillhub unhold platform-team/java-review
 ```bash
 skillhub update platform-team/java-review
 skillhub update
-skillhub rollback platform-team/java-review
+skillhub history platform-team/java-review
+skillhub rollback platform-team/java-review --to 1.2.0
+skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work
 ```
 
-對於 Git 註冊表，`skillhub update` 會透過 `git pull --ff-only` 重新整理快取倉庫，並在 `skill.yaml` 版本變更時更新已安裝 Skills。還原會恢復最近一次歷史安裝副本，並更新 `skillhub.lock`。update 和 rollback 都不會修改執行時副本；當你確實想取代 Agent 實際載入的內容時，再執行 `skillhub deploy status` 和 `skillhub deploy <runtime> ... --force`。
+對於 Git 註冊表，`skillhub update` 會透過 `git pull --ff-only` 重新整理快取倉庫，並在 `skill.yaml` 版本變更時更新已安裝 Skills。`skillhub history <identity>` 會列出更新或重新安裝前儲存的回滾快照。`skillhub rollback <identity>` 預設還原最近一次歷史安裝副本，`--to <version>` 可以選擇指定歷史版本。update 和 rollback 預設都不會修改執行時副本；如果傳入 `--deploy <runtime>`，例如 `skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work`，會還原託管副本並立即用覆蓋語義重新部署 Hermes profile 副本。
 
 解除安裝：
 

@@ -55,6 +55,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return nil
 	case "rollback":
 		return runRollback(args[1:], stdout)
+	case "history":
+		return runHistory(args[1:], stdout)
 	case "hold":
 		return runHold(args[1:], stdout)
 	case "unhold":
@@ -247,7 +249,8 @@ func englishHelp() helpMessages {
 			{"search", "Search synced catalog data"},
 			{"info", "Show one catalog Skill"},
 			{"install", "Install a Skill from a path or registry"},
-			{"rollback", "Restore the previous installed copy"},
+			{"history", "List rollback history for an installed Skill"},
+			{"rollback", "Restore a previous installed copy"},
 			{"hold", "Freeze an installed Skill at its current version"},
 			{"unhold", "Allow a held Skill to update again"},
 			{"holds", "List held Skills"},
@@ -279,7 +282,8 @@ func simplifiedHelp() helpMessages {
 			{"search", "搜索已同步的目录数据"},
 			{"info", "显示一个目录 Skill"},
 			{"install", "从路径或注册表安装 Skill"},
-			{"rollback", "恢复上一个已安装副本"},
+			{"history", "列出已安装 Skill 的回滚历史"},
+			{"rollback", "恢复某个历史副本"},
 			{"hold", "冻结已安装 Skill 的当前版本"},
 			{"unhold", "允许 held Skill 再次更新"},
 			{"holds", "列出 held Skills"},
@@ -311,7 +315,8 @@ func traditionalHelp() helpMessages {
 			{"search", "搜尋已同步的目錄資料"},
 			{"info", "顯示一個目錄 Skill"},
 			{"install", "從路徑或註冊表安裝 Skill"},
-			{"rollback", "還原上一個已安裝副本"},
+			{"history", "列出已安裝 Skill 的回滾歷史"},
+			{"rollback", "還原某個歷史副本"},
 			{"hold", "凍結已安裝 Skill 的目前版本"},
 			{"unhold", "允許 held Skill 再次更新"},
 			{"holds", "列出 held Skills"},
@@ -336,7 +341,8 @@ func englishTopics() map[string]helpTopic {
 		"search":    {Usage: "usage: skillhub search <query> [--json]", Description: "Search synced registry catalog data.", Examples: []string{"  skillhub search git", "  skillhub search runtime --json"}},
 		"info":      {Usage: "usage: skillhub info <registry/identity|identity> [--json]", Description: "Show details for one catalog Skill from synced registry indexes.", Examples: []string{"  skillhub info hub/official/git-commit-cn", "  skillhub info official/git-commit-cn --json"}},
 		"install":   {Usage: "usage: skillhub install <path|registry/skill>", Description: "Install a Skill from a local path, local registry, or Git registry.", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
-		"rollback":  {Usage: "usage: skillhub rollback <identity>", Description: "Restore the latest previous installed copy for an installed Skill.", Examples: []string{"  skillhub rollback platform-team/java-review"}},
+		"history":   {Usage: "usage: skillhub history <identity>", Description: "List rollback snapshots saved before updates and reinstalls.", Examples: []string{"  skillhub history platform-team/java-review"}},
+		"rollback":  {Usage: "usage: skillhub rollback <identity> [--to <version>] [--deploy <runtime>] [--profile <name>]", Description: "Restore a previous installed copy. Without --to, restores the latest snapshot. --deploy redeploys the restored copy with --force.", Examples: []string{"  skillhub rollback platform-team/java-review", "  skillhub rollback platform-team/java-review --to 1.2.0", "  skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work"}},
 		"hold":      {Usage: "usage: skillhub hold <identity> [--reason <text>]", Description: "Freeze an installed Skill at its current version so update skips it.", Examples: []string{"  skillhub hold platform-team/java-review --reason '1.2.0 works best'"}},
 		"unhold":    {Usage: "usage: skillhub unhold <identity>", Description: "Allow a held Skill to update again.", Examples: []string{"  skillhub unhold platform-team/java-review"}},
 		"holds":     {Usage: "usage: skillhub holds", Description: "List Skills currently held from update.", Examples: []string{"  skillhub holds"}},
@@ -359,7 +365,8 @@ func simplifiedTopics() map[string]helpTopic {
 		"search":    {Usage: "用法：skillhub search <查询词> [--json]", Description: "搜索已同步的注册表目录数据。", Examples: []string{"  skillhub search git", "  skillhub search runtime --json"}},
 		"info":      {Usage: "用法：skillhub info <registry/identity|identity> [--json]", Description: "显示一个目录 Skill 的详细信息。", Examples: []string{"  skillhub info hub/official/git-commit-cn", "  skillhub info official/git-commit-cn --json"}},
 		"install":   {Usage: "用法：skillhub install <路径|registry/skill>", Description: "从本地路径、本地注册表或 Git 注册表安装 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
-		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "恢复某个已安装 Skill 的最近一个历史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
+		"history":   {Usage: "用法：skillhub history <identity>", Description: "列出更新或重新安装前保存的回滚快照。", Examples: []string{"  skillhub history platform-team/java-review"}},
+		"rollback":  {Usage: "用法：skillhub rollback <identity> [--to <version>] [--deploy <runtime>] [--profile <name>]", Description: "恢复某个历史副本。没有 --to 时恢复最近快照；--deploy 会用 --force 重新部署恢复后的副本。", Examples: []string{"  skillhub rollback platform-team/java-review", "  skillhub rollback platform-team/java-review --to 1.2.0", "  skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work"}},
 		"hold":      {Usage: "用法：skillhub hold <identity> [--reason <文本>]", Description: "冻结已安装 Skill 的当前版本，update 会跳过它。", Examples: []string{"  skillhub hold platform-team/java-review --reason '1.2.0 效果最好'"}},
 		"unhold":    {Usage: "用法：skillhub unhold <identity>", Description: "允许 held Skill 再次更新。", Examples: []string{"  skillhub unhold platform-team/java-review"}},
 		"holds":     {Usage: "用法：skillhub holds", Description: "列出当前被 hold 的 Skills。", Examples: []string{"  skillhub holds"}},
@@ -382,7 +389,8 @@ func traditionalTopics() map[string]helpTopic {
 		"search":    {Usage: "用法：skillhub search <查詢詞> [--json]", Description: "搜尋已同步的註冊表目錄資料。", Examples: []string{"  skillhub search git", "  skillhub search runtime --json"}},
 		"info":      {Usage: "用法：skillhub info <registry/identity|identity> [--json]", Description: "顯示一個目錄 Skill 的詳細資訊。", Examples: []string{"  skillhub info hub/official/git-commit-cn", "  skillhub info official/git-commit-cn --json"}},
 		"install":   {Usage: "用法：skillhub install <路徑|registry/skill>", Description: "從本機路徑、本機註冊表或 Git 註冊表安裝 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
-		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "還原某個已安裝 Skill 的最近一個歷史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
+		"history":   {Usage: "用法：skillhub history <identity>", Description: "列出更新或重新安裝前儲存的回滾快照。", Examples: []string{"  skillhub history platform-team/java-review"}},
+		"rollback":  {Usage: "用法：skillhub rollback <identity> [--to <version>] [--deploy <runtime>] [--profile <name>]", Description: "還原某個歷史副本。沒有 --to 時還原最近快照；--deploy 會用 --force 重新部署還原後的副本。", Examples: []string{"  skillhub rollback platform-team/java-review", "  skillhub rollback platform-team/java-review --to 1.2.0", "  skillhub rollback platform-team/java-review --to 1.2.0 --deploy hermes --profile work"}},
 		"hold":      {Usage: "用法：skillhub hold <identity> [--reason <文字>]", Description: "凍結已安裝 Skill 的目前版本，update 會跳過它。", Examples: []string{"  skillhub hold platform-team/java-review --reason '1.2.0 效果最好'"}},
 		"unhold":    {Usage: "用法：skillhub unhold <identity>", Description: "允許 held Skill 再次更新。", Examples: []string{"  skillhub unhold platform-team/java-review"}},
 		"holds":     {Usage: "用法：skillhub holds", Description: "列出目前被 hold 的 Skills。", Examples: []string{"  skillhub holds"}},
@@ -519,14 +527,84 @@ func runUninstall(args []string, stdout io.Writer) error {
 }
 
 func runRollback(args []string, stdout io.Writer) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: skillhub rollback <identity>")
+	if len(args) < 1 {
+		return fmt.Errorf("usage: skillhub rollback <identity> [--to <version>] [--deploy <runtime>] [--profile <name>]")
 	}
-	locked, err := install.Rollback(args[0])
+	identity := args[0]
+	options := install.RollbackOptions{}
+	deployRuntime := ""
+	deployProfile := ""
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--to":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--to requires a version")
+			}
+			options.To = args[i]
+		case "--deploy":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--deploy requires a runtime")
+			}
+			deployRuntime = args[i]
+		case "--profile":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			deployProfile = args[i]
+		default:
+			return fmt.Errorf("usage: skillhub rollback <identity> [--to <version>] [--deploy <runtime>] [--profile <name>]")
+		}
+	}
+	if deployProfile != "" && deployRuntime == "" {
+		return fmt.Errorf("--profile requires --deploy")
+	}
+	locked, err := install.RollbackWithOptions(identity, options)
 	if err != nil {
 		return withCLIHint(err)
 	}
 	_, _ = fmt.Fprintf(stdout, "rolled back %s to %s\n", locked.DisplayIdentity(), locked.Version)
+	if deployRuntime != "" {
+		results, err := deploy.DeployRuntime(deployRuntime, deploy.Options{Identity: locked.DisplayIdentity(), Force: true, Profile: deployProfile})
+		if err != nil {
+			return withCLIHint(err)
+		}
+		for _, result := range results {
+			_, _ = fmt.Fprintln(stdout, deployResultLine(result, deployRuntime))
+		}
+	}
+	return nil
+}
+
+func runHistory(args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillhub history <identity>")
+	}
+	entries, err := install.History(args[0])
+	if err != nil {
+		return withCLIHint(err)
+	}
+	if len(entries) == 0 {
+		_, _ = fmt.Fprintf(stdout, "No rollback history for %s.\n", args[0])
+		return nil
+	}
+	rows := make([][]string, 0, len(entries))
+	for _, entry := range entries {
+		commit := shortCommit(entry.SourceCommit)
+		if entry.SourceCommit == "" {
+			commit = "-"
+		}
+		ref := entry.SourceRef
+		if ref == "" {
+			ref = "-"
+		}
+		rows = append(rows, []string{entry.Identity, entry.Version, ref, commit, entry.CreatedAt})
+	}
+	_, _ = fmt.Fprint(stdout, formatTable([]string{"Skill", "Version", "Ref", "Commit", "Saved"}, rows))
+	last := entries[len(entries)-1]
+	_, _ = fmt.Fprintf(stdout, "rollback: skillhub rollback %s --to %s\n", last.Identity, last.Version)
 	return nil
 }
 
