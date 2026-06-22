@@ -735,6 +735,60 @@ entry: SKILL.md
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.2.0"`)
 }
 
+func TestHistoryAndRollbackToVersionWithDeploy(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "java-review")
+	hermesHome := filepath.Join(workspace, "hermes-home")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_HERMES_HOME", hermesHome)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: java-review
+namespace: platform
+version: 1.1.0
+entry: SKILL.md
+targets:
+  - hermes
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.1.0\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/java-review")
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.Replace(readFile(t, filepath.Join(skillDir, "skill.yaml")), "version: 1.1.0", "version: 1.2.0", 1))
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.2.0\n")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update", "platform/java-review")
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.Replace(readFile(t, filepath.Join(skillDir, "skill.yaml")), "version: 1.2.0", "version: 1.3.0", 1))
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Java Review\n\nv1.3.0\n")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update", "platform/java-review")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.3.0")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "history", "platform/java-review")
+	assertContains(t, stdout.String(), "platform/java-review")
+	assertContains(t, stdout.String(), "1.1.0")
+	assertContains(t, stdout.String(), "1.2.0")
+	assertContains(t, stdout.String(), "rollback: skillhub rollback platform/java-review --to 1.2.0")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "rollback", "platform/java-review", "--to", "1.1.0", "--deploy", "hermes", "--profile", "work")
+	assertContains(t, stdout.String(), "rolled back platform/java-review to 1.1.0")
+	assertContains(t, stdout.String(), "deployed platform/java-review to hermes")
+	assertFileContains(t, filepath.Join(home, "installed", "platform__java-review", "SKILL.md"), "v1.1.0")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.1.0"`)
+	assertFileContains(t, filepath.Join(hermesHome, "profiles", "work", "skills", "platform__java-review", "SKILL.md"), "v1.1.0")
+}
+
 func TestRollbackWithoutHistorySuggestsCause(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")

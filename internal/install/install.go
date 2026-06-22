@@ -69,6 +69,19 @@ type UpdatePlan struct {
 	HoldReason       string
 }
 
+type RollbackOptions struct {
+	To string
+}
+
+type HistoryEntry struct {
+	Identity      string
+	Version       string
+	SourceRef     string
+	SourceCommit  string
+	CreatedAt     string
+	InstalledPath string
+}
+
 func LockPath() (string, error) {
 	home, err := config.DefaultHome()
 	if err != nil {
@@ -178,6 +191,10 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 }
 
 func Rollback(identity string) (LockedSkill, error) {
+	return RollbackWithOptions(identity, RollbackOptions{})
+}
+
+func RollbackWithOptions(identity string, options RollbackOptions) (LockedSkill, error) {
 	lock, err := LoadLock()
 	if err != nil {
 		return LockedSkill{}, err
@@ -186,7 +203,7 @@ func Rollback(identity string) (LockedSkill, error) {
 	if !ok {
 		return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
 	}
-	snapshot, err := latestHistory(current.DisplayIdentity())
+	snapshot, err := historySnapshotForVersion(current.DisplayIdentity(), options.To)
 	if err != nil {
 		return LockedSkill{}, err
 	}
@@ -201,6 +218,33 @@ func Rollback(identity string) (LockedSkill, error) {
 		return LockedSkill{}, err
 	}
 	return restored, nil
+}
+
+func History(identity string) ([]HistoryEntry, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return nil, err
+	}
+	current, ok := lock.find(identity)
+	if !ok {
+		return nil, fmt.Errorf("unknown installed skill %q", identity)
+	}
+	snapshots, err := historySnapshots(current.DisplayIdentity())
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]HistoryEntry, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		entries = append(entries, HistoryEntry{
+			Identity:      snapshot.Locked.DisplayIdentity(),
+			Version:       snapshot.Locked.Version,
+			SourceRef:     snapshot.Locked.SourceRef,
+			SourceCommit:  snapshot.Locked.SourceCommit,
+			CreatedAt:     snapshot.CreatedAt,
+			InstalledPath: snapshot.InstalledPath,
+		})
+	}
+	return entries, nil
 }
 
 func Uninstall(identity string) (LockedSkill, error) {
@@ -532,6 +576,7 @@ type historyManifest struct {
 type historySnapshot struct {
 	Locked        LockedSkill
 	InstalledPath string
+	CreatedAt     string
 }
 
 func saveHistory(locked LockedSkill) error {
@@ -562,16 +607,36 @@ func saveHistory(locked LockedSkill) error {
 }
 
 func latestHistory(identity string) (historySnapshot, error) {
-	root, err := historyRoot(identity)
+	return historySnapshotForVersion(identity, "")
+}
+
+func historySnapshotForVersion(identity string, version string) (historySnapshot, error) {
+	snapshots, err := historySnapshots(identity)
 	if err != nil {
 		return historySnapshot{}, err
+	}
+	if version == "" {
+		return snapshots[len(snapshots)-1], nil
+	}
+	for i := len(snapshots) - 1; i >= 0; i-- {
+		if snapshots[i].Locked.Version == version {
+			return snapshots[i], nil
+		}
+	}
+	return historySnapshot{}, fmt.Errorf("no rollback history for %s at version %s", identity, version)
+}
+
+func historySnapshots(identity string) ([]historySnapshot, error) {
+	root, err := historyRoot(identity)
+	if err != nil {
+		return nil, err
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return historySnapshot{}, fmt.Errorf("no rollback history for %s", identity)
+			return nil, fmt.Errorf("no rollback history for %s", identity)
 		}
-		return historySnapshot{}, err
+		return nil, err
 	}
 	var names []string
 	for _, entry := range entries {
@@ -580,22 +645,27 @@ func latestHistory(identity string) (historySnapshot, error) {
 		}
 	}
 	if len(names) == 0 {
-		return historySnapshot{}, fmt.Errorf("no rollback history for %s", identity)
+		return nil, fmt.Errorf("no rollback history for %s", identity)
 	}
 	sort.Strings(names)
-	dir := filepath.Join(root, names[len(names)-1])
-	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
-	if err != nil {
-		return historySnapshot{}, err
+	snapshots := make([]historySnapshot, 0, len(names))
+	for _, name := range names {
+		dir := filepath.Join(root, name)
+		data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+		if err != nil {
+			return nil, err
+		}
+		var manifest historyManifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, historySnapshot{
+			Locked:        manifest.Locked,
+			InstalledPath: filepath.Join(dir, "files"),
+			CreatedAt:     name,
+		})
 	}
-	var manifest historyManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return historySnapshot{}, err
-	}
-	return historySnapshot{
-		Locked:        manifest.Locked,
-		InstalledPath: filepath.Join(dir, "files"),
-	}, nil
+	return snapshots, nil
 }
 
 func historyRoot(identity string) (string, error) {
