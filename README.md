@@ -29,7 +29,7 @@ skill-hub separates local Skill state into three layers:
 | Project discovered | `.skillhub/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, `agent/skills` | Skills found in the current project; visible in list/TUI, but not automatically adopted into the managed store. | No direct runtime impact. |
 | Runtime copy | `~/.codex/skills`, `~/.claude/skills`, `~/.gemini/skills`, `~/.hermes/skills`, or `~/.hermes/profiles/<profile>/skills` | The copy Codex, Claude, Gemini, or Hermes actually loads. | This affects the agent. |
 
-`skillhub update` updates the managed store only. It does not modify Codex, Claude, Gemini, or Hermes runtime directories. Use `skillhub update --dry-run` to preview changes, `skillhub deploy status` to inspect runtime copies, and `skillhub deploy <runtime> ... --force` only when you intend to replace an existing runtime copy.
+`skillhub update` updates the managed store only. It does not modify Codex, Claude, Gemini, or Hermes runtime directories. Use `skillhub check` to see whether installed Skills have updates, `skillhub update --preview` (or the compatible `--dry-run`) to inspect changes before writing, `skillhub deploy status` to inspect runtime copies, and `skillhub deploy <runtime> ... --force` only when you intend to replace an existing runtime copy.
 
 ## Contents
 
@@ -132,7 +132,7 @@ go build -o skillhub ./cmd/skillhub
 | Project setup | `skillhub help`, `skillhub version`, `skillhub doctor`, `skillhub init` |
 | Registries | `skillhub registry add`, `skillhub registry list`, `skillhub registry sync`, `skillhub registry index` |
 | Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
-| Lifecycle | `skillhub install`, `skillhub list`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
+| Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
 | Publication | `skillhub catalog export` |
@@ -247,14 +247,25 @@ Pinned install examples:
 
 For local registries, the pinned value must match the Skill metadata version. For git registries, the pinned value is treated as a git ref and is recorded in `skillhub.lock` together with the resolved commit.
 
+Update awareness and safe preview:
+
+```bash
+./skillhub check
+./skillhub update --preview
+./skillhub update --dry-run   # compatibility alias for --preview
+```
+
+`skillhub check` reports installed Skills with newer source versions without changing files. `skillhub update --preview` shows the version transition, source, targets, deployed runtimes, and rollback command before any write.
+
 Update and rollback:
 
 ```bash
+./skillhub update platform-team/java-review
 ./skillhub update
 ./skillhub rollback platform-team/java-review
 ```
 
-For git registries, `skillhub update` refreshes the cached repository with `git pull --ff-only` and updates installed Skills when their `skill.yaml` version changes. Rollback restores the latest previous installed copy and updates `skillhub.lock`.
+For git registries, `skillhub update` refreshes the cached repository with `git pull --ff-only` and updates installed Skills when their `skill.yaml` version changes. Rollback restores the latest previous installed copy and updates `skillhub.lock`. Runtime copies are not changed by update or rollback; run `skillhub deploy status` and then `skillhub deploy <runtime> ... --force` when you intentionally want to replace what an agent loads.
 
 Uninstall:
 

@@ -43,6 +43,24 @@ type LockedSkill struct {
 	UpdatedAt      string   `json:"updated_at"`
 }
 
+type UpdateOptions struct {
+	Identity string
+}
+
+type UpdatePlan struct {
+	Identity         string
+	CurrentVersion   string
+	AvailableVersion string
+	CurrentCommit    string
+	AvailableCommit  string
+	SourceType       string
+	SourceRegistry   string
+	SourceURL        string
+	AvailablePath    string
+	Targets          []string
+	DeployedTo       []string
+}
+
 func LockPath() (string, error) {
 	home, err := config.DefaultHome()
 	if err != nil {
@@ -232,63 +250,103 @@ func UpdateAll() ([][3]string, error) {
 	return changes, nil
 }
 
-func PlanUpdates() ([][3]string, error) {
+func UpdateOne(identity string) ([][3]string, error) {
 	lock, err := LoadLock()
 	if err != nil {
 		return nil, err
 	}
-	return updateLock(&lock, true)
+	if _, ok := lock.find(identity); !ok {
+		return nil, fmt.Errorf("unknown installed skill %q", identity)
+	}
+	changes, err := updateLock(&lock, false, identity)
+	if err != nil {
+		return nil, err
+	}
+	if err := SaveLock(lock); err != nil {
+		return nil, err
+	}
+	return changes, nil
 }
 
-func updateLock(lock *LockFile, dryRun bool) ([][3]string, error) {
+func PlanUpdates() ([][3]string, error) {
+	plans, err := PlanUpdateDetails(UpdateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	changes := make([][3]string, 0, len(plans))
+	for _, plan := range plans {
+		changes = append(changes, [3]string{plan.Identity, plan.CurrentVersion, plan.AvailableVersion})
+	}
+	return changes, nil
+}
+
+func PlanUpdateDetails(options UpdateOptions) ([]UpdatePlan, error) {
+	lock, err := LoadLock()
+	if err != nil {
+		return nil, err
+	}
+	return planUpdateDetails(lock, options)
+}
+
+func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, error) {
+	var plans []UpdatePlan
+	for _, locked := range lock.Skills {
+		identity := locked.DisplayIdentity()
+		if options.Identity != "" && identity != options.Identity && locked.Name != options.Identity {
+			continue
+		}
+		resolved, err := resolveUpdateSource(locked, true)
+		if err != nil {
+			return nil, err
+		}
+		meta, err := skill.LoadCompatibleMetadata(resolved.SourcePath, resolved.SourceRegistry)
+		if err != nil {
+			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
+		}
+		if meta.Version == locked.Version {
+			continue
+		}
+		plans = append(plans, UpdatePlan{
+			Identity:         identity,
+			CurrentVersion:   locked.Version,
+			AvailableVersion: meta.Version,
+			CurrentCommit:    locked.SourceCommit,
+			AvailableCommit:  resolved.SourceCommit,
+			SourceType:       locked.SourceType,
+			SourceRegistry:   locked.SourceRegistry,
+			SourceURL:        locked.SourceURL,
+			AvailablePath:    resolved.SourcePath,
+			Targets:          meta.Targets,
+			DeployedTo:       locked.DeployedTo,
+		})
+	}
+	if options.Identity != "" && len(plans) == 0 {
+		if _, ok := lock.find(options.Identity); !ok {
+			return nil, fmt.Errorf("unknown installed skill %q", options.Identity)
+		}
+	}
+	return plans, nil
+}
+
+func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string, error) {
+	filter := ""
+	if len(identities) > 0 {
+		filter = identities[0]
+	}
 	var changes [][3]string
 	for i, locked := range lock.Skills {
-		resolved := locked
-		if locked.SourceType == registry.SourceTypeGit {
-			cacheName := locked.SourceCache
-			sourceSubpath := locked.SourceSubpath
-			if inferredCache, inferredSubpath, ok := inferCachedSource(locked.SourcePath, locked.SourceRef); ok {
-				if cacheName == "" {
-					cacheName = inferredCache
-				}
-				if sourceSubpath == "" {
-					sourceSubpath = inferredSubpath
-				}
-			}
-			if cacheName == "" {
-				cacheName = locked.SourceRegistry
-			}
-			if sourceSubpath == "" {
-				sourceSubpath = locked.Name
-			}
-			var cachePath string
-			var commit string
-			var err error
-			if locked.SourceRef != "" {
-				cachePath, commit, err = registry.EnsureGitCacheAtRef(cacheName, locked.SourceURL, locked.SourceRef)
-			} else {
-				cachePath, err = registry.EnsureGitCache(cacheName, locked.SourceURL)
-				if err == nil {
-					commit, err = registry.GitCommit(cachePath)
-				}
-			}
-			if err != nil {
-				return nil, fmt.Errorf("update %s: %w", locked.Name, err)
-			}
-			resolvedPath, err := registry.RegistrySourcePath(cachePath, sourceSubpath)
-			if err != nil {
-				return nil, fmt.Errorf("update %s: %w", locked.Name, err)
-			}
-			resolved.SourcePath = resolvedPath
-			resolved.SourceCommit = commit
-			resolved.SourceSubpath = filepath.ToSlash(sourceSubpath)
-			resolved.SourceCache = cacheName
-			if !dryRun {
-				lock.Skills[i].SourcePath = resolved.SourcePath
-				lock.Skills[i].SourceCommit = resolved.SourceCommit
-				lock.Skills[i].SourceSubpath = resolved.SourceSubpath
-				lock.Skills[i].SourceCache = resolved.SourceCache
-			}
+		if filter != "" && locked.DisplayIdentity() != filter && locked.Name != filter {
+			continue
+		}
+		resolved, err := resolveUpdateSource(locked, dryRun)
+		if err != nil {
+			return nil, err
+		}
+		if !dryRun {
+			lock.Skills[i].SourcePath = resolved.SourcePath
+			lock.Skills[i].SourceCommit = resolved.SourceCommit
+			lock.Skills[i].SourceSubpath = resolved.SourceSubpath
+			lock.Skills[i].SourceCache = resolved.SourceCache
 		}
 		meta, err := skill.LoadCompatibleMetadata(resolved.SourcePath, resolved.SourceRegistry)
 		if err != nil {
@@ -327,6 +385,52 @@ func updateLock(lock *LockFile, dryRun bool) ([][3]string, error) {
 		lock.Skills[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	return changes, nil
+}
+
+func resolveUpdateSource(locked LockedSkill, dryRun bool) (LockedSkill, error) {
+	resolved := locked
+	if locked.SourceType != registry.SourceTypeGit {
+		return resolved, nil
+	}
+	cacheName := locked.SourceCache
+	sourceSubpath := locked.SourceSubpath
+	if inferredCache, inferredSubpath, ok := inferCachedSource(locked.SourcePath, locked.SourceRef); ok {
+		if cacheName == "" {
+			cacheName = inferredCache
+		}
+		if sourceSubpath == "" {
+			sourceSubpath = inferredSubpath
+		}
+	}
+	if cacheName == "" {
+		cacheName = locked.SourceRegistry
+	}
+	if sourceSubpath == "" {
+		sourceSubpath = locked.Name
+	}
+	var cachePath string
+	var commit string
+	var err error
+	if locked.SourceRef != "" {
+		cachePath, commit, err = registry.EnsureGitCacheAtRef(cacheName, locked.SourceURL, locked.SourceRef)
+	} else {
+		cachePath, err = registry.EnsureGitCache(cacheName, locked.SourceURL)
+		if err == nil {
+			commit, err = registry.GitCommit(cachePath)
+		}
+	}
+	if err != nil {
+		return LockedSkill{}, fmt.Errorf("update %s: %w", locked.Name, err)
+	}
+	resolvedPath, err := registry.RegistrySourcePath(cachePath, sourceSubpath)
+	if err != nil {
+		return LockedSkill{}, fmt.Errorf("update %s: %w", locked.Name, err)
+	}
+	resolved.SourcePath = resolvedPath
+	resolved.SourceCommit = commit
+	resolved.SourceSubpath = filepath.ToSlash(sourceSubpath)
+	resolved.SourceCache = cacheName
+	return resolved, nil
 }
 
 func inferCachedSource(sourcePath string, sourceRef string) (cacheName string, sourceSubpath string, ok bool) {

@@ -73,6 +73,64 @@ tags:
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"deployed_runtimes": [`)
 }
 
+func TestCheckAndUpdatePreviewShowAvailableSkillUpdates(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	projectDir := filepath.Join(workspace, "project")
+	registryDir := filepath.Join(workspace, "registry")
+	skillDir := filepath.Join(registryDir, "prompt-review")
+	t.Setenv("SKILLHUB_HOME", home)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.TrimSpace(`
+name: prompt-review
+namespace: platform
+version: 1.0.0
+description: Review prompts before use
+entry: SKILL.md
+targets:
+  - hermes
+`)+"\n")
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Prompt Review\n\nPrefer short prompts.\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", registryDir)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", "company/prompt-review")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.0.0"`)
+
+	mustWriteFile(t, filepath.Join(skillDir, "skill.yaml"), strings.Replace(readFile(t, filepath.Join(skillDir, "skill.yaml")), "version: 1.0.0", "version: 1.1.0", 1))
+	mustWriteFile(t, filepath.Join(skillDir, "SKILL.md"), "# Prompt Review\n\nPrefer specific prompts.\n")
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "check")
+	checkOutput := stdout.String()
+	assertContains(t, checkOutput, "Updates available")
+	assertContains(t, checkOutput, "platform/prompt-review")
+	assertContains(t, checkOutput, "1.0.0")
+	assertContains(t, checkOutput, "1.1.0")
+	assertContains(t, checkOutput, "skillhub update --preview")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.0.0"`)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update", "--preview")
+	previewOutput := stdout.String()
+	assertContains(t, previewOutput, "Update preview")
+	assertContains(t, previewOutput, "platform/prompt-review")
+	assertContains(t, previewOutput, "1.0.0 -> 1.1.0")
+	assertContains(t, previewOutput, "Source: local company")
+	assertContains(t, previewOutput, "Targets: hermes")
+	assertContains(t, previewOutput, "Update one Skill: skillhub update platform/prompt-review")
+	assertContains(t, previewOutput, "runtime copies will not be changed")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.0.0"`)
+
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "update", "--dry-run")
+	assertContains(t, stdout.String(), "Update preview")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"version": "1.0.0"`)
+}
+
 func TestInstallFromExplicitLocalPath(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")
