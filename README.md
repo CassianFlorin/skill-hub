@@ -4,7 +4,7 @@
 
 **A Skill package manager for AI agents.**
 
-Install, version, update, roll back, and deploy Skills across Codex, Claude, and Gemini from one CLI.
+Install, version, update, roll back, and deploy Skills across Codex, Claude, Gemini, and Hermes from one CLI.
 
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
 [![npm](https://img.shields.io/npm/v/@cassianflorin/skillhub?logo=npm&label=npm)](https://www.npmjs.com/package/@cassianflorin/skillhub)
@@ -27,9 +27,9 @@ skill-hub separates local Skill state into three layers:
 | --- | --- | --- | --- |
 | Managed store | `$SKILLHUB_HOME/installed` and `skillhub.lock` | Skills installed through `skillhub install`; these can be updated and rolled back. | No direct runtime impact. |
 | Project discovered | `.skillhub/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, `agent/skills` | Skills found in the current project; visible in list/TUI, but not automatically adopted into the managed store. | No direct runtime impact. |
-| Runtime copy | `~/.codex/skills`, `~/.claude/skills`, `~/.gemini/skills` | The copy Codex, Claude, or Gemini actually loads. | This affects the agent. |
+| Runtime copy | `~/.codex/skills`, `~/.claude/skills`, `~/.gemini/skills`, `~/.hermes/skills`, or `~/.hermes/profiles/<profile>/skills` | The copy Codex, Claude, Gemini, or Hermes actually loads. | This affects the agent. |
 
-`skillhub update` updates the managed store only. It does not modify Codex, Claude, or Gemini runtime directories. Use `skillhub update --dry-run` to preview changes, `skillhub deploy status` to inspect runtime copies, and `skillhub deploy <runtime> ... --force` only when you intend to replace an existing runtime copy.
+`skillhub update` updates the managed store only. It does not modify Codex, Claude, Gemini, or Hermes runtime directories. Use `skillhub update --dry-run` to preview changes, `skillhub deploy status` to inspect runtime copies, and `skillhub deploy <runtime> ... --force` only when you intend to replace an existing runtime copy.
 
 ## Contents
 
@@ -56,7 +56,7 @@ skill-hub separates local Skill state into three layers:
 | Registry discovery | Find Skills from local or Git-backed registries. |
 | Reproducible installs | Track installed versions, checksums, source refs, and deployments in `skillhub.lock`. |
 | Safe upgrades | Pin installs to versions, tags, branches, or commits; update and roll back when needed. |
-| Runtime deployment | Copy installed Skills into Codex, Claude, and Gemini runtime directories. |
+| Runtime deployment | Copy installed Skills into Codex, Claude, Gemini, and Hermes runtime directories. |
 | Catalog publishing | Export a static marketplace snapshot as `index.html` and `catalog.json`. |
 | Registry validation | Validate indexes before sync or publication. |
 
@@ -133,7 +133,7 @@ go build -o skillhub ./cmd/skillhub
 | Registries | `skillhub registry add`, `skillhub registry list`, `skillhub registry sync`, `skillhub registry index` |
 | Discovery | `skillhub catalog list`, `skillhub catalog featured`, `skillhub catalog tags`, `skillhub search`, `skillhub info` |
 | Lifecycle | `skillhub install`, `skillhub list`, `skillhub update`, `skillhub rollback`, `skillhub uninstall` |
-| Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy status` |
+| Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
 | Publication | `skillhub catalog export` |
 
@@ -159,7 +159,7 @@ SKILLHUB_LANG=zh-CN skillhub help init
 
 ## Terminal Management
 
-`skillhub tui` opens a terminal management interface for local Skills and synced catalog data. It shows global and project-only Skills side by side, deployment status for Codex, Claude, and Gemini, catalog search results, and operation logs.
+`skillhub tui` opens a terminal management interface for local Skills and synced catalog data. It shows global and project-only Skills side by side, deployment status for Codex, Claude, Gemini, and Hermes, catalog search results, and operation logs.
 
 ```bash
 skillhub tui
@@ -263,7 +263,7 @@ Uninstall:
 ./skillhub uninstall platform-team/java-review --deployed
 ```
 
-By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, and Gemini runtime copies.
+By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, Gemini, and Hermes runtime copies.
 
 ## Runtime Deploy
 
@@ -274,6 +274,7 @@ Supported runtime targets:
 | Codex | `SKILLHUB_CODEX_DIR` | `~/.codex/skills` |
 | Claude | `SKILLHUB_CLAUDE_DIR` | `~/.claude/skills` |
 | Gemini | `SKILLHUB_GEMINI_DIR` | `~/.gemini/skills` |
+| Hermes | `SKILLHUB_HERMES_DIR` | `~/.hermes/skills` |
 
 Deploy examples:
 
@@ -282,7 +283,11 @@ Deploy examples:
 ./skillhub deploy codex platform-team/java-review --force
 ./skillhub deploy claude platform-team/java-review --force
 ./skillhub deploy gemini platform-team/java-review --force
+./skillhub deploy hermes platform-team/java-review --force
+./skillhub deploy hermes platform-team/java-review --profile work --force
 ```
+
+For Hermes, `--profile <name>` deploys to `~/.hermes/profiles/<name>/skills`. Set `SKILLHUB_HERMES_HOME` to override the Hermes home root used for profile deployments.
 
 Status:
 
@@ -291,6 +296,7 @@ Status:
 ./skillhub deploy status codex
 ./skillhub deploy status claude
 ./skillhub deploy status gemini
+./skillhub deploy status hermes
 ```
 
 Deploy respects installed Skill `targets` metadata. Skills with no targets are treated as compatible with all supported runtimes for backward compatibility. In batch deploys, unsupported Skills are skipped; explicitly deploying an unsupported Skill to a runtime returns an error.
@@ -329,6 +335,7 @@ targets:
   - codex
   - claude
   - gemini
+  - hermes
 tags:
   - java
   - review
@@ -361,7 +368,7 @@ Registries use `skillhub.index.json` schema v2. Old index files without `schema_
       "namespace": "official",
       "version": "0.1.0",
       "description": "Review Java service code with repo-aware checks.",
-      "targets": ["codex", "claude", "gemini"],
+      "targets": ["codex", "claude", "gemini", "hermes"],
       "tags": ["java", "review"],
       "source": {
         "type": "git",

@@ -204,9 +204,10 @@ func TestHelpDeployPrintsDeployUsage(t *testing.T) {
 
 	runOK(t, workspace, &stdout, "help", "deploy")
 
-	assertContains(t, stdout.String(), "usage: skillhub deploy <codex|claude|gemini>")
+	assertContains(t, stdout.String(), "usage: skillhub deploy <codex|claude|gemini|hermes>")
 	assertContains(t, stdout.String(), "--dry-run")
 	assertContains(t, stdout.String(), "--force")
+	assertContains(t, stdout.String(), "--profile")
 	assertContains(t, stdout.String(), "skillhub deploy status")
 }
 
@@ -219,7 +220,7 @@ func TestChineseHelpExplainsUpdateDeployAndTUIBoundaries(t *testing.T) {
 		runOK(t, workspace, &stdout, "help", "update", "--lang", "zh-CN")
 
 		assertContains(t, stdout.String(), "只更新 skillhub 托管副本")
-		assertContains(t, stdout.String(), "不会修改 Codex、Claude 或 Gemini 运行时目录")
+		assertContains(t, stdout.String(), "不会修改 Codex、Claude、Gemini 或 Hermes 运行时目录")
 		assertContains(t, stdout.String(), "skillhub update --dry-run")
 	})
 
@@ -260,9 +261,11 @@ func TestDoctorShowsProjectAndRuntimeReadiness(t *testing.T) {
 	home := filepath.Join(workspace, "skillhub-home")
 	codexDir := filepath.Join(workspace, "codex")
 	claudeDir := filepath.Join(workspace, "claude")
+	hermesDir := filepath.Join(workspace, "hermes", "skills")
 	t.Setenv("SKILLHUB_HOME", home)
 	t.Setenv("SKILLHUB_CODEX_DIR", codexDir)
 	t.Setenv("SKILLHUB_CLAUDE_DIR", claudeDir)
+	t.Setenv("SKILLHUB_HERMES_DIR", hermesDir)
 
 	var stdout bytes.Buffer
 	runOK(t, projectDir, &stdout, "init")
@@ -273,6 +276,7 @@ func TestDoctorShowsProjectAndRuntimeReadiness(t *testing.T) {
 	assertContains(t, stdout.String(), "home: "+home)
 	assertContains(t, stdout.String(), "runtime codex: "+codexDir)
 	assertContains(t, stdout.String(), "runtime claude: "+claudeDir)
+	assertContains(t, stdout.String(), "runtime hermes: "+hermesDir)
 	assertContains(t, stdout.String(), "registries: 1")
 }
 
@@ -2030,6 +2034,68 @@ targets:
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"gemini"`)
 }
 
+func TestDeployHermesCopiesInstalledSkill(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	hermesDir := filepath.Join(workspace, "hermes-skills")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "my-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_HERMES_DIR", hermesDir)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: my-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - hermes
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Local Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "hermes", "local/my-skill")
+
+	assertContains(t, stdout.String(), "deployed local/my-skill to hermes")
+	assertFileContains(t, filepath.Join(hermesDir, "local__my-skill", "SKILL.md"), "# Local Skill")
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"hermes"`)
+}
+
+func TestDeployHermesProfileUsesProfileSkillsDirectory(t *testing.T) {
+	workspace := t.TempDir()
+	home := filepath.Join(workspace, "skillhub-home")
+	hermesHome := filepath.Join(workspace, "hermes-home")
+	projectDir := filepath.Join(workspace, "project")
+	localSkill := filepath.Join(workspace, "profile-skill")
+	t.Setenv("SKILLHUB_HOME", home)
+	t.Setenv("SKILLHUB_HERMES_HOME", hermesHome)
+
+	mustWriteFile(t, filepath.Join(localSkill, "skill.yaml"), strings.TrimSpace(`
+name: profile-skill
+namespace: local
+version: 0.1.0
+entry: SKILL.md
+targets:
+  - hermes
+`)+"\n")
+	mustWriteFile(t, filepath.Join(localSkill, "SKILL.md"), "# Profile Skill\n")
+
+	var stdout bytes.Buffer
+	runOK(t, projectDir, &stdout, "init")
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "install", localSkill)
+	stdout.Reset()
+	runOK(t, projectDir, &stdout, "deploy", "hermes", "local/profile-skill", "--profile", "work")
+
+	assertContains(t, stdout.String(), "deployed local/profile-skill to hermes")
+	assertFileContains(t, filepath.Join(hermesHome, "profiles", "work", "skills", "local__profile-skill", "SKILL.md"), "# Profile Skill")
+	assertPathMissing(t, filepath.Join(hermesHome, "skills", "local__profile-skill"))
+}
+
 func TestDeployRejectsExplicitUnsupportedRuntimeTarget(t *testing.T) {
 	workspace := t.TempDir()
 	home := filepath.Join(workspace, "skillhub-home")
@@ -2077,7 +2143,7 @@ func TestUnsupportedRuntimeListsSupportedNames(t *testing.T) {
 		t.Fatal("expected unsupported runtime error")
 	}
 	assertContains(t, err.Error(), `unsupported runtime "openai"`)
-	assertContains(t, err.Error(), "supported runtimes: codex, claude, gemini")
+	assertContains(t, err.Error(), "supported runtimes: codex, claude, gemini, hermes")
 }
 
 func TestDeployBatchSkipsUnsupportedRuntimeTargets(t *testing.T) {

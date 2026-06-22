@@ -21,10 +21,15 @@ func GeminiDir() (string, error) {
 	return RuntimeDir("gemini")
 }
 
+func HermesDir() (string, error) {
+	return RuntimeDir("hermes")
+}
+
 type Options struct {
 	Identity string
 	DryRun   bool
 	Force    bool
+	Profile  string
 }
 
 type Runtime struct {
@@ -61,6 +66,7 @@ var supportedRuntimes = []Runtime{
 	{Name: "codex", EnvVar: "SKILLHUB_CODEX_DIR", DefaultSubdir: filepath.Join(".codex", "skills")},
 	{Name: "claude", EnvVar: "SKILLHUB_CLAUDE_DIR", DefaultSubdir: filepath.Join(".claude", "skills")},
 	{Name: "gemini", EnvVar: "SKILLHUB_GEMINI_DIR", DefaultSubdir: filepath.Join(".gemini", "skills")},
+	{Name: "hermes", EnvVar: "SKILLHUB_HERMES_DIR", DefaultSubdir: filepath.Join(".hermes", "skills")},
 }
 
 func SupportedRuntimes() []Runtime {
@@ -87,6 +93,14 @@ func DeployClaude(options Options) ([]Result, error) {
 
 func DeployGemini(options Options) ([]Result, error) {
 	return deployRuntime("gemini", options)
+}
+
+func DeployHermes(options Options) ([]Result, error) {
+	return deployRuntime("hermes", options)
+}
+
+func DeployRuntime(runtime string, options Options) ([]Result, error) {
+	return deployRuntime(runtime, options)
 }
 
 func Statuses(runtime string) ([]Status, error) {
@@ -144,9 +158,28 @@ func selectedRuntimeNames(runtime string) ([]string, error) {
 }
 
 func RuntimeDir(name string) (string, error) {
+	return RuntimeDirWithOptions(name, Options{})
+}
+
+func RuntimeDirWithOptions(name string, options Options) (string, error) {
 	runtime, ok := runtimeByName(name)
 	if !ok {
 		return "", fmt.Errorf("unsupported runtime %q", name)
+	}
+	if name == "hermes" && options.Profile != "" {
+		hermesHome := os.Getenv("SKILLHUB_HERMES_HOME")
+		if hermesHome == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", err
+			}
+			hermesHome = filepath.Join(home, ".hermes")
+		}
+		absHome, err := filepath.Abs(hermesHome)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(absHome, "profiles", options.Profile, "skills"), nil
 	}
 	if dir := os.Getenv(runtime.EnvVar); dir != "" {
 		return filepath.Abs(dir)
@@ -176,7 +209,7 @@ func RuntimeTarget(runtime string, identity string) (string, error) {
 }
 
 func deployRuntime(runtime string, options Options) ([]Result, error) {
-	targetRoot, err := RuntimeDir(runtime)
+	targetRoot, err := RuntimeDirWithOptions(runtime, options)
 	if err != nil {
 		return nil, err
 	}

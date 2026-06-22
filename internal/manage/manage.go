@@ -209,16 +209,7 @@ func Execute(workDir string, request OperationRequest) (OperationResult, error) 
 }
 
 func deployRuntime(runtime string, options deploy.Options) ([]deploy.Result, error) {
-	switch runtime {
-	case "codex":
-		return deploy.DeployCodex(options)
-	case "claude":
-		return deploy.DeployClaude(options)
-	case "gemini":
-		return deploy.DeployGemini(options)
-	default:
-		return nil, deployUnsupported(runtime)
-	}
+	return deploy.DeployRuntime(runtime, options)
 }
 
 func deployUnsupported(runtime string) error {

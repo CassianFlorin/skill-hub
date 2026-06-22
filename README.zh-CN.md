@@ -12,7 +12,7 @@
 - 将 Skills 安装到 `$SKILLHUB_HOME` 下的托管本地目录。
 - 在 `skillhub.lock` 中记录已安装状态，包括版本、校验和、来源 ref 和已部署运行时。
 - 支持按元数据版本、Git tag、分支或 commit 固定安装。
-- 将已安装 Skills 部署到 Codex、Claude 和 Gemini 的运行时目录。
+- 将已安装 Skills 部署到 Codex、Claude、Gemini 和 Hermes 的运行时目录。
 - 导出静态目录快照为 `index.html` 和 `catalog.json`。
 - 在同步或发布前校验注册表索引。
 
@@ -132,6 +132,7 @@ skillhub tui
 skillhub deploy codex
 skillhub deploy claude
 skillhub deploy gemini
+skillhub deploy hermes
 skillhub deploy status
 ```
 
@@ -241,7 +242,7 @@ skillhub uninstall platform-team/java-review
 skillhub uninstall platform-team/java-review --deployed
 ```
 
-默认情况下，卸载只会移除已安装存储副本和锁文件记录。使用 `--deployed` 可以同时移除 Codex、Claude 和 Gemini 运行时副本。
+默认情况下，卸载只会移除已安装存储副本和锁文件记录。使用 `--deployed` 可以同时移除 Codex、Claude、Gemini 和 Hermes 运行时副本。
 
 ## 运行时部署
 
@@ -252,6 +253,7 @@ skillhub uninstall platform-team/java-review --deployed
 | Codex | `SKILLHUB_CODEX_DIR` | `~/.codex/skills` |
 | Claude | `SKILLHUB_CLAUDE_DIR` | `~/.claude/skills` |
 | Gemini | `SKILLHUB_GEMINI_DIR` | `~/.gemini/skills` |
+| Hermes | `SKILLHUB_HERMES_DIR` | `~/.hermes/skills` |
 
 部署示例：
 
@@ -260,7 +262,11 @@ skillhub deploy codex platform-team/java-review --dry-run
 skillhub deploy codex platform-team/java-review --force
 skillhub deploy claude platform-team/java-review --force
 skillhub deploy gemini platform-team/java-review --force
+skillhub deploy hermes platform-team/java-review --force
+skillhub deploy hermes platform-team/java-review --profile work --force
 ```
+
+Hermes 支持 `--profile <name>`，会部署到 `~/.hermes/profiles/<name>/skills`。如需覆盖 profile 根目录，可设置 `SKILLHUB_HERMES_HOME`。
 
 查看状态：
 
@@ -269,6 +275,7 @@ skillhub deploy status
 skillhub deploy status codex
 skillhub deploy status claude
 skillhub deploy status gemini
+skillhub deploy status hermes
 ```
 
 部署会遵守已安装 Skill 的 `targets` 元数据。没有声明 targets 的 Skills 会被视为兼容所有支持的运行时，以便向后兼容。批量部署时，不兼容的 Skills 会被跳过；如果显式把不兼容的 Skill 部署到某个运行时，命令会返回错误。
@@ -307,6 +314,7 @@ targets:
   - codex
   - claude
   - gemini
+  - hermes
 tags:
   - java
   - review
@@ -339,7 +347,7 @@ author: platform-team
       "namespace": "official",
       "version": "0.1.0",
       "description": "Review Java service code with repo-aware checks.",
-      "targets": ["codex", "claude", "gemini"],
+      "targets": ["codex", "claude", "gemini", "hermes"],
       "tags": ["java", "review"],
       "source": {
         "type": "git",

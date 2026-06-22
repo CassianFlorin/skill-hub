@@ -84,7 +84,7 @@ const listUsage = "usage: skillhub list [--scope all|global|project]"
 const catalogUsage = "usage: skillhub catalog <list|featured|tags|targets|namespaces|trust|export>"
 
 func deployUsage() string {
-	return fmt.Sprintf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force]", strings.Join(deploy.RuntimeNames(), "|"))
+	return fmt.Sprintf("usage: skillhub deploy <%s> [identity] [--dry-run] [--force] [--profile <name>]", strings.Join(deploy.RuntimeNames(), "|"))
 }
 
 func supportedRuntimeList() string {
@@ -318,7 +318,7 @@ func englishTopics() map[string]helpTopic {
 		"install":   {Usage: "usage: skillhub install <path|registry/skill>", Description: "Install a Skill from a local path, local registry, or Git registry.", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "usage: skillhub rollback <identity>", Description: "Restore the latest previous installed copy for an installed Skill.", Examples: []string{"  skillhub rollback platform-team/java-review"}},
 		"uninstall": {Usage: "usage: skillhub uninstall <identity> [--deployed]", Description: "Remove an installed Skill. Use --deployed to also remove runtime copies.", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
-		"deploy":    {Usage: deployUsage(), Description: "Deploy copies managed Skills into runtime directories. Use --force only when you intend to replace an existing runtime copy.", Sections: []helpSection{{Title: "Runtimes:", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "Options:", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
+		"deploy":    {Usage: deployUsage(), Description: "Deploy copies managed Skills into runtime directories. Use --force only when you intend to replace an existing runtime copy.", Sections: []helpSection{{Title: "Runtimes:", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "Options:", Lines: []string{"  --dry-run, --force, --profile <name>"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy hermes official/git-commit-cn --profile work", "  skillhub deploy status"}},
 		"list":      {Usage: listUsage, Sections: []helpSection{{Title: "Scopes:", Lines: []string{"  --scope all      Show global installed Skills and project-only Skills", "  --scope global   Show Skills from $SKILLHUB_HOME/skillhub.lock", "  --scope project  Show Skills found in the current project"}}, {Title: "Project roots:", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"update":    {Usage: "usage: skillhub update [--dry-run]", Description: "Update managed store copies from recorded sources. Runtime copies are not changed until deploy runs.", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
 		"tui":       {Usage: "usage: skillhub tui", Description: "Open the terminal management interface. Managed means skillhub can update and rollback; Runtime means the copy agents load.", Examples: []string{"  skillhub tui"}},
@@ -337,9 +337,9 @@ func simplifiedTopics() map[string]helpTopic {
 		"install":   {Usage: "用法：skillhub install <路径|registry/skill>", Description: "从本地路径、本地注册表或 Git 注册表安装 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "恢复某个已安装 Skill 的最近一个历史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
 		"uninstall": {Usage: "用法：skillhub uninstall <identity> [--deployed]", Description: "移除已安装 Skill。使用 --deployed 可同时移除运行时副本。", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
-		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才会修改运行时目录；--force 会覆盖已有运行时副本。", Sections: []helpSection{{Title: "运行时：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "选项：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
+		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才会修改运行时目录；--force 会覆盖已有运行时副本。", Sections: []helpSection{{Title: "运行时：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "选项：", Lines: []string{"  --dry-run, --force, --profile <name>"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy hermes official/git-commit-cn --profile work", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "范围：", Lines: []string{"  --scope all      显示全局已安装 Skill 和项目内 Skill", "  --scope global   显示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  显示当前项目中的 Skill"}}, {Title: "项目目录：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
-		"update":    {Usage: "用法：skillhub update [--dry-run]", Description: "只更新 skillhub 托管副本，不会修改 Codex、Claude 或 Gemini 运行时目录。", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
+		"update":    {Usage: "用法：skillhub update [--dry-run]", Description: "只更新 skillhub 托管副本，不会修改 Codex、Claude、Gemini 或 Hermes 运行时目录。", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
 		"tui":       {Usage: "用法：skillhub tui", Description: "打开终端图形化管理界面。Managed 表示 skillhub 可更新和回滚；Runtime 表示 Agent 实际加载的副本。", Examples: []string{"  skillhub tui"}},
 	}
 }
@@ -356,9 +356,9 @@ func traditionalTopics() map[string]helpTopic {
 		"install":   {Usage: "用法：skillhub install <路徑|registry/skill>", Description: "從本機路徑、本機註冊表或 Git 註冊表安裝 Skill。", Examples: []string{"  skillhub install hub/official/git-commit-cn", "  skillhub install ./agent/skills/commerce-data-fix-sql", "  skillhub install company/java-review@1.2.0"}},
 		"rollback":  {Usage: "用法：skillhub rollback <identity>", Description: "還原某個已安裝 Skill 的最近一個歷史副本。", Examples: []string{"  skillhub rollback platform-team/java-review"}},
 		"uninstall": {Usage: "用法：skillhub uninstall <identity> [--deployed]", Description: "移除已安裝 Skill。使用 --deployed 可同時移除執行時副本。", Examples: []string{"  skillhub uninstall platform-team/java-review", "  skillhub uninstall platform-team/java-review --deployed"}},
-		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才會修改執行時目錄；--force 會覆蓋既有執行時副本。", Sections: []helpSection{{Title: "執行時：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "選項：", Lines: []string{"  --dry-run, --force"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy codex official/git-commit-cn --force", "  skillhub deploy status"}},
+		"deploy":    {Usage: "用法：" + deployUsage()[len("usage: "):], Description: "deploy 才會修改執行時目錄；--force 會覆蓋既有執行時副本。", Sections: []helpSection{{Title: "執行時：", Lines: []string{"  " + supportedRuntimeList()}}, {Title: "選項：", Lines: []string{"  --dry-run, --force, --profile <name>"}}}, Examples: []string{"  skillhub deploy codex official/git-commit-cn", "  skillhub deploy codex official/git-commit-cn --dry-run", "  skillhub deploy hermes official/git-commit-cn --profile work", "  skillhub deploy status"}},
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "範圍：", Lines: []string{"  --scope all      顯示全域已安裝 Skill 和專案內 Skill", "  --scope global   顯示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  顯示目前專案中的 Skill"}}, {Title: "專案目錄：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
-		"update":    {Usage: "用法：skillhub update [--dry-run]", Description: "只更新 skillhub 託管副本，不會修改 Codex、Claude 或 Gemini 執行時目錄。", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
+		"update":    {Usage: "用法：skillhub update [--dry-run]", Description: "只更新 skillhub 託管副本，不會修改 Codex、Claude、Gemini 或 Hermes 執行時目錄。", Examples: []string{"  skillhub update --dry-run", "  skillhub update"}},
 		"tui":       {Usage: "用法：skillhub tui", Description: "開啟終端圖形化管理介面。Managed 表示 skillhub 可更新和回滾；Runtime 表示 Agent 實際載入的副本。", Examples: []string{"  skillhub tui"}},
 	}
 }
@@ -1330,12 +1330,19 @@ func runDeploy(args []string, stdout io.Writer) error {
 		return runDeployStatus(args[1:], stdout)
 	}
 	options := deploy.Options{}
-	for _, arg := range args[1:] {
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
 		switch arg {
 		case "--dry-run":
 			options.DryRun = true
 		case "--force":
 			options.Force = true
+		case "--profile":
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			options.Profile = args[i]
 		default:
 			if options.Identity != "" {
 				return errors.New(deployUsage())
@@ -1343,19 +1350,11 @@ func runDeploy(args []string, stdout io.Writer) error {
 			options.Identity = arg
 		}
 	}
-	var deployed []deploy.Result
-	var err error
-	switch runtime {
-	case "codex":
-		deployed, err = deploy.DeployCodex(options)
-	case "claude":
-		deployed, err = deploy.DeployClaude(options)
-	case "gemini":
-		deployed, err = deploy.DeployGemini(options)
-	default:
-		return fmt.Errorf("unsupported runtime %q; supported runtimes: %s", runtime, supportedRuntimeList())
-	}
+	deployed, err := deploy.DeployRuntime(runtime, options)
 	if err != nil {
+		if strings.Contains(err.Error(), "unsupported runtime ") {
+			return fmt.Errorf("%w; supported runtimes: %s", err, supportedRuntimeList())
+		}
 		return withCLIHint(err)
 	}
 	for _, result := range deployed {
