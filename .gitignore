@@ -1,7 +1,9 @@
 /skillhub
 /npm/vendor/
 /.skillhub-e2e/
-/docs/
+/docs/*
+!/docs/ARCHITECTURE.md
+!/docs/ROADMAP.md
 /.codegraph/
 /.superpowers/
 /.cursor/
