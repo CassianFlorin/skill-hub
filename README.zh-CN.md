@@ -124,6 +124,8 @@ skillhub install hub/official/git-commit-cn@v0.1.0
 skillhub list
 skillhub list --scope all
 skillhub list --scope project
+skillhub check
+skillhub update --preview
 skillhub update
 skillhub rollback official/git-commit-cn
 skillhub uninstall official/git-commit-cn
@@ -226,14 +228,25 @@ skillhub install team/java-review@<commit-sha>
 
 对于本地注册表，固定值必须匹配 Skill 元数据版本。对于 Git 注册表，固定值会被视为 Git ref，并和解析出的 commit 一起记录到 `skillhub.lock`。
 
+更新感知和安全预览：
+
+```bash
+skillhub check
+skillhub update --preview
+skillhub update --dry-run   # 兼容旧用法，等同于 --preview
+```
+
+`skillhub check` 只检查已安装 Skill 是否有新的来源版本，不会修改任何文件。`skillhub update --preview` 会在写入前展示版本变化、来源、targets、已部署运行时和回滚命令。
+
 更新和回滚：
 
 ```bash
+skillhub update platform-team/java-review
 skillhub update
 skillhub rollback platform-team/java-review
 ```
 
-对于 Git 注册表，`skillhub update` 会通过 `git pull --ff-only` 刷新缓存仓库，并在 `skill.yaml` 版本变化时更新已安装 Skills。回滚会恢复最近一次历史安装副本，并更新 `skillhub.lock`。
+对于 Git 注册表，`skillhub update` 会通过 `git pull --ff-only` 刷新缓存仓库，并在 `skill.yaml` 版本变化时更新已安装 Skills。回滚会恢复最近一次历史安装副本，并更新 `skillhub.lock`。update 和 rollback 都不会修改运行时副本；当你确实想替换 Agent 实际加载的内容时，再运行 `skillhub deploy status` 和 `skillhub deploy <runtime> ... --force`。
 
 卸载：
 
