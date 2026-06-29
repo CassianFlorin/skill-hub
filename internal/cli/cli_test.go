@@ -829,7 +829,7 @@ func TestRegistryAddLocalResolvesRelativePathsFromWorkDir(t *testing.T) {
 	stdout.Reset()
 	runOK(t, projectDir, &stdout, "registry", "add", "local", "company", "./skills")
 
-	assertFileContains(t, filepath.Join(projectDir, "skillhub.yaml"), registryDir)
+	assertFileContains(t, filepath.Join(projectDir, "skillhub.yaml"), jsonStringContents(t, registryDir))
 }
 
 func TestRegistryIndexGenerateWritesCatalog(t *testing.T) {
@@ -1508,7 +1508,7 @@ func TestInstallRejectsEscapingExternalGitSourcePath(t *testing.T) {
       "version": "1.2.0",
       "description": "Outside skill",
       "targets": ["codex"],
-      "source": {"type": "git", "url": "`+remoteRepo+`", "path": "../safe/outside-skill"},
+      "source": {"type": "git", "url": "`+filepath.ToSlash(remoteRepo)+`", "path": "../safe/outside-skill"},
       "trust": {"level": "curated"},
       "featured": false,
       "updated_at": "2026-05-27"
@@ -1921,7 +1921,7 @@ func TestInstallFromCatalogExternalGitSource(t *testing.T) {
       "description": "External Java review skill",
       "targets": ["codex"],
       "tags": ["java"],
-      "source": {"type": "git", "url": "`+remoteRepo+`", "path": "java-review", "ref": "v1.2.0"},
+      "source": {"type": "git", "url": "`+filepath.ToSlash(remoteRepo)+`", "path": "java-review", "ref": "v1.2.0"},
       "trust": {"level": "curated"},
       "featured": true,
       "updated_at": "2026-05-27"
@@ -1940,7 +1940,7 @@ func TestInstallFromCatalogExternalGitSource(t *testing.T) {
 	assertContains(t, stdout.String(), "installed company/java-review@1.2.0")
 	assertFileContains(t, filepath.Join(home, "installed", "company__java-review", "SKILL.md"), "External Java review skill")
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_type": "git"`)
-	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_url": "`+remoteRepo+`"`)
+	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_url": "`+filepath.ToSlash(remoteRepo)+`"`)
 	assertFileContains(t, filepath.Join(home, "skillhub.lock"), `"source_ref": "v1.2.0"`)
 }
 
@@ -2015,7 +2015,7 @@ func TestUpdateCatalogExternalGitSourceUsesRecordedSubpathAndRef(t *testing.T) {
       "description": "External Java review skill",
       "targets": ["codex"],
       "tags": ["java"],
-      "source": {"type": "git", "url": "`+remoteRepo+`", "path": "nested/java-review", "ref": "v1.2.0"},
+      "source": {"type": "git", "url": "`+filepath.ToSlash(remoteRepo)+`", "path": "nested/java-review", "ref": "v1.2.0"},
       "trust": {"level": "curated"},
       "featured": true,
       "updated_at": "2026-05-27"
@@ -2840,6 +2840,18 @@ func readFile(t *testing.T, path string) string {
 func assertFileContains(t *testing.T, path string, want string) {
 	t.Helper()
 	assertContains(t, readFile(t, path), want)
+}
+
+// jsonStringContents returns how s would appear inside a JSON document, without
+// the surrounding quotes. This keeps assertions OS-agnostic: on Windows a path
+// like C:\foo is stored as C:\\foo in the JSON config/lock files.
+func jsonStringContents(t *testing.T, s string) string {
+	t.Helper()
+	encoded, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal %q: %v", s, err)
+	}
+	return string(encoded[1 : len(encoded)-1])
 }
 
 func assertFileNotContains(t *testing.T, path string, want string) {
