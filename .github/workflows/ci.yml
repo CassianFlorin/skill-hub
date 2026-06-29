@@ -50,11 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows is intentionally excluded for now: the CLI has pre-existing
-        # Windows path-handling gaps (install-spec resolution, source-path
-        # escaping) that are tracked separately. Both POSIX platforms run here,
-        # and the race detector covers the concurrent TUI code paths.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -70,8 +66,16 @@ jobs:
         with:
           node-version: 22
 
+      # The race detector needs a C toolchain, which the Windows runner lacks,
+      # so Windows runs a plain test pass while the POSIX platforms run with
+      # -race (and produce the coverage profile).
       - name: Test (with race detector)
+        if: matrix.os != 'windows-latest'
         run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Test
+        if: matrix.os == 'windows-latest'
+        run: go test ./...
 
       - name: Test npm installer
         run: npm test --prefix npm

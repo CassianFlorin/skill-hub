@@ -860,7 +860,20 @@ func splitPinnedRef(spec string) (string, string) {
 }
 
 func looksLikePath(spec string) bool {
-	return spec == "." || strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "/") || strings.HasPrefix(spec, "~")
+	if spec == "." || strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "/") || strings.HasPrefix(spec, "~") {
+		return true
+	}
+	// Recognize OS-native absolute paths, e.g. Windows "C:\foo" or "\\host\share".
+	if filepath.IsAbs(spec) {
+		return true
+	}
+	// On platforms where the separator is not "/" (Windows), a backslash never
+	// appears in a registry/skill spec (those always use "/"), so any spec
+	// containing the native separator is a filesystem path.
+	if os.PathSeparator != '/' && strings.ContainsRune(spec, os.PathSeparator) {
+		return true
+	}
+	return false
 }
 
 func absoluteFrom(workDir string, path string) (string, error) {
