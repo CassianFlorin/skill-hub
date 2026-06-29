@@ -468,7 +468,7 @@ Tagged releases 會透過 GitHub Actions 發佈多平台歸檔。同一個 relea
 - `Formula/skillhub.rb` 可以在發佈時透過 `scripts/generate-homebrew-formula.sh` 重新整理。
 
 ```bash
-NEXT_TAG=v1.3.8
+NEXT_TAG=v1.3.9
 git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
 git push origin "${NEXT_TAG}"
 ```
@@ -477,4 +477,4 @@ npm 包版本會從 Git tag 設定。安裝時 npm 包會在 `postinstall` 中�
 
 Homebrew 要求 formula 位於 tap 中。倉庫中的 `Formula/skillhub.rb` 鏡像最新 release formula，並作為 `CassianFlorin/homebrew-tap` 發佈路徑的來源。
 
-如果 release assets 已經存在，只需要在設定 secrets 後重試 npm 或 Homebrew 發佈，可以手動執行 `Publish Installers` workflow，並輸入既有 tag，例如 `v1.3.8`。
+如果 release assets 已經存在，只需要在設定 secrets 後重試 npm 或 Homebrew 發佈，可以手動執行 `Publish Installers` workflow，並輸入既有 tag，例如 `v1.3.9`。
