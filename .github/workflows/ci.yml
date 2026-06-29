@@ -12,9 +12,15 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on a branch/PR to save runner minutes; never cancel
+# in-progress runs on master.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
-    name: Test and build
+  lint:
+    name: Lint and vet
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,18 +30,59 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: false
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "${unformatted}" ]]; then
+            echo "These files are not gofmt-clean:"
+            echo "${unformatted}"
+            echo "Run 'gofmt -w .' to fix."
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+  test:
+    name: Test and build
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is intentionally excluded for now: the CLI has pre-existing
+        # Windows path-handling gaps (install-spec resolution, source-path
+        # escaping) that are tracked separately. Both POSIX platforms run here,
+        # and the race detector covers the concurrent TUI code paths.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
 
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
           node-version: 22
 
-      - name: Test
-        run: go test ./...
+      - name: Test (with race detector)
+        run: go test -race -coverprofile=coverage.out ./...
 
       - name: Test npm installer
         run: npm test --prefix npm
 
       - name: Build
         run: go build -v ./cmd/skillhub
+
+      - name: Upload coverage profile
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: error
