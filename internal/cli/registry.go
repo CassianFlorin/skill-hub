@@ -18,7 +18,7 @@ func runRegistry(args []string, stdout io.Writer, workDir string) error {
 	case "add":
 		return runRegistryAdd(args[1:], stdout, workDir)
 	case "list":
-		return runRegistryList(stdout, workDir)
+		return runRegistryList(args[1:], stdout, workDir)
 	case "sync":
 		return runRegistrySync(args[1:], stdout, workDir)
 	case "index":
@@ -91,12 +91,23 @@ func runRegistryIndex(args []string, stdout io.Writer, workDir string) error {
 	return nil
 }
 
-func runRegistryList(stdout io.Writer, workDir string) error {
+func runRegistryList(args []string, stdout io.Writer, workDir string) error {
+	jsonOutput := false
+	for _, arg := range args {
+		if arg != "--json" {
+			return fmt.Errorf("usage: skillhub registry list [--json]")
+		}
+		jsonOutput = true
+	}
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprint(stdout, formatRegistryList(registry.ListRegistries(cfg)))
+	statuses := registry.ListRegistries(cfg)
+	if jsonOutput {
+		return writeJSON(stdout, registryJSONList(statuses))
+	}
+	_, _ = fmt.Fprint(stdout, formatRegistryList(statuses))
 	return nil
 }
 

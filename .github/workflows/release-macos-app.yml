@@ -1,0 +1,116 @@
+name: Release macOS App
+
+# Builds, Developer ID-signs, notarizes, and uploads SkillHub.app on tagged
+# releases. Until the signing secrets are configured (see macos/SIGNING.md),
+# the gate job skips packaging so tagged releases stay green.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the app to (e.g. v1.3.11)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    name: Check signing secrets
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          if [ -n "${MACOS_CERTIFICATE}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=macOS app skipped::Signing secrets are not configured; see macos/SIGNING.md. Skipping SkillHub.app packaging."
+          fi
+
+  package:
+    name: Build, sign, notarize, upload
+    needs: gate
+    if: needs.gate.outputs.configured == 'true'
+    runs-on: macos-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags needed for the version injected by build.sh
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PWD: ${{ secrets.KEYCHAIN_PWD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="${RUNNER_TEMP}/certificate.p12"
+          KEYCHAIN="${RUNNER_TEMP}/build.keychain-db"
+          echo "${MACOS_CERTIFICATE}" | base64 --decode > "${CERT_PATH}"
+          security create-keychain -p "${KEYCHAIN_PWD}" "${KEYCHAIN}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security unlock-keychain -p "${KEYCHAIN_PWD}" "${KEYCHAIN}"
+          security import "${CERT_PATH}" -k "${KEYCHAIN}" -P "${MACOS_CERTIFICATE_PWD}" \
+            -T /usr/bin/codesign
+          security list-keychains -d user -s "${KEYCHAIN}" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "${KEYCHAIN_PWD}" "${KEYCHAIN}" >/dev/null
+          rm -f "${CERT_PATH}"
+
+      - name: Build and sign SkillHub.app
+        env:
+          SKILLHUB_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: ./macos/build.sh
+
+      - name: Notarize and staple
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          APP="macos/build/SkillHub.app"
+          KEY_PATH="${RUNNER_TEMP}/notary_key.p8"
+          echo "${NOTARY_KEY}" | base64 --decode > "${KEY_PATH}"
+
+          # Submit a zip of the app and wait for the result.
+          ditto -c -k --keepParent "${APP}" "${RUNNER_TEMP}/notarize.zip"
+          xcrun notarytool submit "${RUNNER_TEMP}/notarize.zip" \
+            --key "${KEY_PATH}" \
+            --key-id "${NOTARY_KEY_ID}" \
+            --issuer "${NOTARY_ISSUER_ID}" \
+            --wait
+          rm -f "${KEY_PATH}"
+
+          # Staple the ticket so the app validates offline.
+          xcrun stapler staple "${APP}"
+          xcrun stapler validate "${APP}"
+          spctl --assess --type execute --verbose=4 "${APP}"
+
+      - name: Package distributable zip
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent "macos/build/SkillHub.app" \
+            "macos/build/SkillHub-${TAG}-macos.zip"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: macos/build/SkillHub-${{ env.TAG }}-macos.zip

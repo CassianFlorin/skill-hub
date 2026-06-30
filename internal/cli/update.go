@@ -10,12 +10,19 @@ import (
 )
 
 func runCheck(args []string, stdout io.Writer) error {
-	if len(args) != 0 {
-		return fmt.Errorf("usage: skillhub check")
+	jsonOutput := false
+	for _, arg := range args {
+		if arg != "--json" {
+			return fmt.Errorf("usage: skillhub check [--json]")
+		}
+		jsonOutput = true
 	}
 	plans, err := install.PlanUpdateDetails(install.UpdateOptions{})
 	if err != nil {
 		return err
+	}
+	if jsonOutput {
+		return writeJSON(stdout, updatePlanJSONList(plans))
 	}
 	if len(plans) == 0 {
 		_, _ = fmt.Fprintln(stdout, "all skills are current")

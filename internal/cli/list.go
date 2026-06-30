@@ -10,6 +10,7 @@ import (
 
 func runList(args []string, stdout io.Writer, workDir string) error {
 	scope := "all"
+	jsonOutput := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--scope":
@@ -18,6 +19,8 @@ func runList(args []string, stdout io.Writer, workDir string) error {
 				return fmt.Errorf("--scope requires a value")
 			}
 			scope = args[i]
+		case "--json":
+			jsonOutput = true
 		default:
 			return fmt.Errorf(listUsage)
 		}
@@ -55,6 +58,9 @@ func runList(args []string, stdout io.Writer, workDir string) error {
 				Location: discovered.RelPath,
 			})
 		}
+	}
+	if jsonOutput {
+		return writeJSON(stdout, listJSONRows(rows))
 	}
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(stdout, "no skills found")
