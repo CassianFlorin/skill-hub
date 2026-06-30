@@ -79,16 +79,25 @@ func deployResultLine(result deploy.Result, runtime string) string {
 }
 
 func runDeployStatus(args []string, stdout io.Writer) error {
-	if len(args) > 1 {
-		return fmt.Errorf("usage: skillhub deploy status [%s]", strings.Join(deploy.RuntimeNames(), "|"))
-	}
 	runtime := ""
-	if len(args) == 1 {
-		runtime = args[0]
+	jsonOutput := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOutput = true
+		default:
+			if strings.HasPrefix(arg, "--") || runtime != "" {
+				return fmt.Errorf("usage: skillhub deploy status [%s] [--json]", strings.Join(deploy.RuntimeNames(), "|"))
+			}
+			runtime = arg
+		}
 	}
 	statuses, err := deploy.Statuses(runtime)
 	if err != nil {
 		return err
+	}
+	if jsonOutput {
+		return writeJSON(stdout, deployStatusJSONList(statuses))
 	}
 	_, _ = fmt.Fprint(stdout, formatDeployStatus(statuses))
 	return nil

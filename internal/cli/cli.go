@@ -24,7 +24,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 	case "version":
 		return runVersion(stdout)
 	case "doctor":
-		return runDoctor(stdout, workDir)
+		return runDoctor(args[1:], stdout, workDir)
 	case "init":
 		return runInit(stdout, workDir)
 	case "registry":
@@ -82,10 +82,17 @@ func runVersion(stdout io.Writer) error {
 
 const rootUsage = "usage: skillhub <command>"
 const registryUsage = "usage: skillhub registry <add|list|sync|index>"
-const listUsage = "usage: skillhub list [--scope all|global|project]"
+const listUsage = "usage: skillhub list [--scope all|global|project] [--json]"
 const catalogUsage = "usage: skillhub catalog <list|featured|tags|targets|namespaces|trust|export>"
 
-func runDoctor(stdout io.Writer, workDir string) error {
+func runDoctor(args []string, stdout io.Writer, workDir string) error {
+	jsonOutput := false
+	for _, arg := range args {
+		if arg != "--json" {
+			return fmt.Errorf("usage: skillhub doctor [--json]")
+		}
+		jsonOutput = true
+	}
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return err
@@ -94,24 +101,40 @@ func runDoctor(stdout io.Writer, workDir string) error {
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(stdout, "config: ok")
-	_, _ = fmt.Fprintf(stdout, "config.path: %s\n", config.Path(workDir))
-	_, _ = fmt.Fprintf(stdout, "home: %s\n", home)
-	_, _ = fmt.Fprintf(stdout, "install_dir: %s\n", cfg.InstallDir)
+	runtimes := make([]doctorRuntimeJSON, 0)
 	for _, runtime := range deploy.SupportedRuntimes() {
 		dir, err := deploy.RuntimeDir(runtime.Name)
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(stdout, "runtime %s: %s\n", runtime.Name, dir)
+		runtimes = append(runtimes, doctorRuntimeJSON{Name: runtime.Name, Dir: dir})
 	}
-	_, _ = fmt.Fprintf(stdout, "registries: %d\n", len(cfg.Registries))
-	for _, status := range registry.ListRegistries(cfg) {
-		_, _ = fmt.Fprintf(stdout, "registry %s: %s %s skills=%d generated_at=%s\n", status.Name, status.Type, status.Location, status.SkillCount, status.GeneratedAt)
-	}
+	statuses := registry.ListRegistries(cfg)
 	lock, err := install.LoadLock()
 	if err != nil {
 		return err
+	}
+	if jsonOutput {
+		return writeJSON(stdout, doctorJSON{
+			Config:     "ok",
+			ConfigPath: config.Path(workDir),
+			Home:       home,
+			InstallDir: cfg.InstallDir,
+			Runtimes:   runtimes,
+			Registries: registryJSONList(statuses),
+			Installed:  len(lock.Skills),
+		})
+	}
+	_, _ = fmt.Fprintln(stdout, "config: ok")
+	_, _ = fmt.Fprintf(stdout, "config.path: %s\n", config.Path(workDir))
+	_, _ = fmt.Fprintf(stdout, "home: %s\n", home)
+	_, _ = fmt.Fprintf(stdout, "install_dir: %s\n", cfg.InstallDir)
+	for _, runtime := range runtimes {
+		_, _ = fmt.Fprintf(stdout, "runtime %s: %s\n", runtime.Name, runtime.Dir)
+	}
+	_, _ = fmt.Fprintf(stdout, "registries: %d\n", len(cfg.Registries))
+	for _, status := range statuses {
+		_, _ = fmt.Fprintf(stdout, "registry %s: %s %s skills=%d generated_at=%s\n", status.Name, status.Type, status.Location, status.SkillCount, status.GeneratedAt)
 	}
 	_, _ = fmt.Fprintf(stdout, "installed: %d\n", len(lock.Skills))
 	return nil

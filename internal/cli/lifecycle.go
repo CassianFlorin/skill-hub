@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/cassian/skill-hub/internal/deploy"
 	"github.com/cassian/skill-hub/internal/install"
@@ -45,12 +46,19 @@ func runUnhold(args []string, stdout io.Writer) error {
 }
 
 func runHolds(args []string, stdout io.Writer) error {
-	if len(args) != 0 {
-		return fmt.Errorf("usage: skillhub holds")
+	jsonOutput := false
+	for _, arg := range args {
+		if arg != "--json" {
+			return fmt.Errorf("usage: skillhub holds [--json]")
+		}
+		jsonOutput = true
 	}
 	held, err := install.HeldSkills()
 	if err != nil {
 		return err
+	}
+	if jsonOutput {
+		return writeJSON(stdout, holdJSONList(held))
 	}
 	if len(held) == 0 {
 		_, _ = fmt.Fprintln(stdout, "no held skills")
@@ -153,15 +161,31 @@ func runRollback(args []string, stdout io.Writer) error {
 }
 
 func runHistory(args []string, stdout io.Writer) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: skillhub history <identity>")
+	identity := ""
+	jsonOutput := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOutput = true
+		default:
+			if strings.HasPrefix(arg, "--") || identity != "" {
+				return fmt.Errorf("usage: skillhub history <identity> [--json]")
+			}
+			identity = arg
+		}
 	}
-	entries, err := install.History(args[0])
+	if identity == "" {
+		return fmt.Errorf("usage: skillhub history <identity> [--json]")
+	}
+	entries, err := install.History(identity)
 	if err != nil {
 		return withCLIHint(err)
 	}
+	if jsonOutput {
+		return writeJSON(stdout, historyJSONList(entries))
+	}
 	if len(entries) == 0 {
-		_, _ = fmt.Fprintf(stdout, "No rollback history for %s.\n", args[0])
+		_, _ = fmt.Fprintf(stdout, "No rollback history for %s.\n", identity)
 		return nil
 	}
 	rows := make([][]string, 0, len(entries))
