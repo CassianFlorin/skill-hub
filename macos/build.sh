@@ -61,10 +61,23 @@ if [[ -f "${MACOS_DIR}/AppIcon.icns" ]]; then
     cp "${MACOS_DIR}/AppIcon.icns" "${APP}/Contents/Resources/AppIcon.icns"
 fi
 
-# 4. Ad-hoc codesign so the app launches locally without Gatekeeper friction.
-echo "==> Ad-hoc codesigning"
-codesign --force --deep --sign - "${APP}" >/dev/null 2>&1 || \
-    echo "    (codesign skipped/failed — app still runs locally)"
+# 4. Codesign. Defaults to ad-hoc ("-") for local use; CI sets
+#    SKILLHUB_SIGN_IDENTITY to a "Developer ID Application: …" identity for a
+#    notarizable build (hardened runtime + secure timestamp, signed inner-out).
+SIGN_IDENTITY="${SKILLHUB_SIGN_IDENTITY:--}"
+if [[ "${SIGN_IDENTITY}" == "-" ]]; then
+    echo "==> Ad-hoc codesigning"
+    codesign --force --deep --sign - "${APP}" >/dev/null 2>&1 || \
+        echo "    (codesign skipped/failed — app still runs locally)"
+else
+    echo "==> Codesigning with: ${SIGN_IDENTITY}"
+    # Sign the embedded CLI first, then the app bundle (inner-out).
+    codesign --force --options runtime --timestamp \
+        --sign "${SIGN_IDENTITY}" "${APP}/Contents/Resources/skillhub"
+    codesign --force --options runtime --timestamp \
+        --sign "${SIGN_IDENTITY}" "${APP}"
+    codesign --verify --strict --verbose=2 "${APP}"
+fi
 
 echo ""
 echo "Built ${APP}"
