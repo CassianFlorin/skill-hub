@@ -4,8 +4,9 @@ The [`Release macOS App`](../.github/workflows/release-macos-app.yml) workflow
 builds, Developer ID-signs, notarizes, staples, and uploads `SkillHub.app` to
 the GitHub release for each `v*` tag.
 
-Until the secrets below are configured, the workflow's gate job **skips**
-packaging, so tagged releases stay green. Once the secrets exist, the next tag
+Until the secrets below are configured, the workflow falls back to an **ad-hoc
+(unsigned)** build, attached to the release with an `-unsigned` suffix — users
+open it once via right-click → **Open**. Once the secrets exist, the next tag
 (or a manual `workflow_dispatch`) produces a fully notarized app that opens
 without Gatekeeper warnings.
 
