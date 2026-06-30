@@ -1,8 +1,11 @@
 name: Release macOS App
 
-# Builds, Developer ID-signs, notarizes, and uploads SkillHub.app on tagged
-# releases. Until the signing secrets are configured (see macos/SIGNING.md),
-# the gate job skips packaging so tagged releases stay green.
+# Builds SkillHub.app on tagged releases and attaches it to the GitHub release.
+#
+# - If the Developer ID signing secrets are configured (see macos/SIGNING.md),
+#   the app is signed, notarized, and stapled — it opens with no warnings.
+# - Otherwise it falls back to an ad-hoc (unsigned) build, uploaded with an
+#   "-unsigned" suffix. Users open it once via right-click -> Open.
 
 on:
   push:
@@ -18,27 +21,8 @@ permissions:
   contents: write
 
 jobs:
-  gate:
-    name: Check signing secrets
-    runs-on: ubuntu-latest
-    outputs:
-      configured: ${{ steps.check.outputs.configured }}
-    steps:
-      - id: check
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        run: |
-          if [ -n "${MACOS_CERTIFICATE}" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=macOS app skipped::Signing secrets are not configured; see macos/SIGNING.md. Skipping SkillHub.app packaging."
-          fi
-
   package:
-    name: Build, sign, notarize, upload
-    needs: gate
-    if: needs.gate.outputs.configured == 'true'
+    name: Build and attach SkillHub.app
     runs-on: macos-latest
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -53,7 +37,20 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Detect signing configuration
+        id: signing
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          if [ -n "${MACOS_CERTIFICATE}" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Unsigned build::Signing secrets are not configured (see macos/SIGNING.md). Building an ad-hoc app; users must right-click -> Open on first launch."
+          fi
+
       - name: Import Developer ID certificate
+        if: steps.signing.outputs.signed == 'true'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
@@ -73,12 +70,14 @@ jobs:
             -s -k "${KEYCHAIN_PWD}" "${KEYCHAIN}" >/dev/null
           rm -f "${CERT_PATH}"
 
-      - name: Build and sign SkillHub.app
+      - name: Build SkillHub.app
+        # When the secret is empty, build.sh falls back to ad-hoc signing.
         env:
           SKILLHUB_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
         run: ./macos/build.sh
 
       - name: Notarize and staple
+        if: steps.signing.outputs.signed == 'true'
         env:
           NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
@@ -88,8 +87,6 @@ jobs:
           APP="macos/build/SkillHub.app"
           KEY_PATH="${RUNNER_TEMP}/notary_key.p8"
           echo "${NOTARY_KEY}" | base64 --decode > "${KEY_PATH}"
-
-          # Submit a zip of the app and wait for the result.
           ditto -c -k --keepParent "${APP}" "${RUNNER_TEMP}/notarize.zip"
           xcrun notarytool submit "${RUNNER_TEMP}/notarize.zip" \
             --key "${KEY_PATH}" \
@@ -97,20 +94,37 @@ jobs:
             --issuer "${NOTARY_ISSUER_ID}" \
             --wait
           rm -f "${KEY_PATH}"
-
-          # Staple the ticket so the app validates offline.
           xcrun stapler staple "${APP}"
           xcrun stapler validate "${APP}"
           spctl --assess --type execute --verbose=4 "${APP}"
 
       - name: Package distributable zip
+        id: pkg
         run: |
           set -euo pipefail
-          ditto -c -k --keepParent "macos/build/SkillHub.app" \
-            "macos/build/SkillHub-${TAG}-macos.zip"
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            NAME="SkillHub-${TAG}-macos.zip"
+          else
+            NAME="SkillHub-${TAG}-macos-unsigned.zip"
+          fi
+          ditto -c -k --keepParent "macos/build/SkillHub.app" "macos/build/${NAME}"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          files: macos/build/SkillHub-${{ env.TAG }}-macos.zip
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: macos/build/${{ steps.pkg.outputs.name }}
+        run: |
+          set -euo pipefail
+          # The Release workflow creates the GitHub release; wait for it to exist.
+          for i in $(seq 1 30); do
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              gh release upload "${TAG}" "${ASSET}" --clobber
+              echo "Uploaded ${ASSET} to release ${TAG}"
+              exit 0
+            fi
+            echo "Waiting for release ${TAG} to be published… (${i}/30)"
+            sleep 10
+          done
+          echo "::error::Release ${TAG} was not found after waiting 5 minutes."
+          exit 1
