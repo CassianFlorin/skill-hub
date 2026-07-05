@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/cassian/skill-hub/internal/deploy"
-	"github.com/cassian/skill-hub/internal/install"
-	"github.com/cassian/skill-hub/internal/registry"
+	"github.com/CassianFlorin/skill-hub/internal/deploy"
+	"github.com/CassianFlorin/skill-hub/internal/install"
+	"github.com/CassianFlorin/skill-hub/internal/registry"
 )
 
 // listJSONRow is the machine-readable form of a `skillhub list` row.

@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/deploy"
-	"github.com/cassian/skill-hub/internal/install"
+	"github.com/CassianFlorin/skill-hub/internal/deploy"
+	"github.com/CassianFlorin/skill-hub/internal/install"
 )
 
 func runHold(args []string, stdout io.Writer) error {

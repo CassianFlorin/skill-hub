@@ -6,8 +6,8 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/cassian/skill-hub/internal/config"
-	"github.com/cassian/skill-hub/internal/registry"
+	"github.com/CassianFlorin/skill-hub/internal/config"
+	"github.com/CassianFlorin/skill-hub/internal/registry"
 )
 
 func runRegistry(args []string, stdout io.Writer, workDir string) error {

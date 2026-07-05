@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/registry"
+	"github.com/CassianFlorin/skill-hub/internal/registry"
 )
 
 func featuredLabel(featured bool) string {

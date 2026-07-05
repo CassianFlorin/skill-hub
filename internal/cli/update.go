@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/install"
-	"github.com/cassian/skill-hub/internal/registry"
+	"github.com/CassianFlorin/skill-hub/internal/install"
+	"github.com/CassianFlorin/skill-hub/internal/registry"
 )
 
 func runCheck(args []string, stdout io.Writer) error {

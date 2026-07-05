@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cassian/skill-hub/internal/install"
-	projectskills "github.com/cassian/skill-hub/internal/project"
+	"github.com/CassianFlorin/skill-hub/internal/install"
+	projectskills "github.com/CassianFlorin/skill-hub/internal/project"
 )
 
 func runList(args []string, stdout io.Writer, workDir string) error {

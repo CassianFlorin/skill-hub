@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cassian/skill-hub/internal/config"
-	"github.com/cassian/skill-hub/internal/skill"
+	"github.com/CassianFlorin/skill-hub/internal/config"
+	"github.com/CassianFlorin/skill-hub/internal/skill"
 )
 
 const (

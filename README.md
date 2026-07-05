@@ -10,6 +10,7 @@ Install, version, update, roll back, and deploy Skills across Codex, Claude, Gem
 [![npm](https://img.shields.io/npm/v/@cassianflorin/skillhub?logo=npm&label=npm)](https://www.npmjs.com/package/@cassianflorin/skillhub)
 [![Homebrew](https://img.shields.io/badge/Homebrew-CassianFlorin%2Ftap-FBB040?logo=homebrew&logoColor=black)](https://github.com/CassianFlorin/homebrew-tap)
 [![Release](https://img.shields.io/github/v/release/CassianFlorin/skill-hub?label=release)](https://github.com/CassianFlorin/skill-hub/releases)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
@@ -48,6 +49,8 @@ skill-hub separates local Skill state into three layers:
 - [Local Development](#local-development)
 - [Version Policy](#version-policy)
 - [Release](#release)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Why skill-hub
 
@@ -66,7 +69,7 @@ skill-hub separates local Skill state into three layers:
 | --- | --- |
 | Homebrew | `brew tap CassianFlorin/tap && brew install skillhub` |
 | npm | `npm install -g @cassianflorin/skillhub` |
-| Go source install | `go install github.com/cassian/skill-hub/cmd/skillhub@latest` |
+| Go source install | `go install github.com/CassianFlorin/skill-hub/cmd/skillhub@latest` |
 
 Homebrew:
 
@@ -93,7 +96,7 @@ npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${
 Go source install:
 
 ```bash
-go install github.com/cassian/skill-hub/cmd/skillhub@latest
+go install github.com/CassianFlorin/skill-hub/cmd/skillhub@latest
 ```
 
 ## Quick Start
@@ -495,3 +498,13 @@ The npm package version is set from the Git tag during release. The package down
 Homebrew requires formulae to live in a tap. The checked-in `Formula/skillhub.rb` mirrors the latest release formula and is the source used for the `CassianFlorin/homebrew-tap` publication path.
 
 If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.10`.
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and pull request guidelines. To publish a Skill to the public catalog, see [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry).
+
+Security issues should be reported privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+skill-hub is released under the [MIT License](LICENSE).

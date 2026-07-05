@@ -43,7 +43,7 @@ npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${
 開發者也可以直接從原始碼安裝：
 
 ```bash
-go install github.com/cassian/skill-hub/cmd/skillhub@latest
+go install github.com/CassianFlorin/skill-hub/cmd/skillhub@latest
 ```
 
 ## 快速開始
@@ -478,3 +478,9 @@ npm 包版本會從 Git tag 設定。安裝時 npm 包會在 `postinstall` 中�
 Homebrew 要求 formula 位於 tap 中。倉庫中的 `Formula/skillhub.rb` 鏡像最新 release formula，並作為 `CassianFlorin/homebrew-tap` 發佈路徑的來源。
 
 如果 release assets 已經存在，只需要在設定 secrets 後重試 npm 或 Homebrew 發佈，可以手動執行 `Publish Installers` workflow，並輸入既有 tag，例如 `v1.3.10`。
+
+## 貢獻與授權條款
+
+歡迎貢獻。開發環境建置與 PR 規範見 [CONTRIBUTING.md](CONTRIBUTING.md)；向公共目錄投稿 Skill 請前往 [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry)。安全問題請透過 [SECURITY.md](SECURITY.md) 中的方式私下回報。
+
+skill-hub 使用 [MIT 授權條款](LICENSE) 發佈。

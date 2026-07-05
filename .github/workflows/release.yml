@@ -58,7 +58,7 @@ jobs:
 
             GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build \
               -trimpath \
-              -ldflags "-s -w -X github.com/cassian/skill-hub/internal/cli.Version=${tag}" \
+              -ldflags "-s -w -X github.com/CassianFlorin/skill-hub/internal/cli.Version=${tag}" \
               -o "dist/${name}/${binary}" \
               ./cmd/skillhub
 

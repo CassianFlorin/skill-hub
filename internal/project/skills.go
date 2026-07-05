@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/cassian/skill-hub/internal/skill"
+	"github.com/CassianFlorin/skill-hub/internal/skill"
 )
 
 var skillRoots = []string{

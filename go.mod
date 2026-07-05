@@ -1,4 +1,4 @@
-module github.com/cassian/skill-hub
+module github.com/CassianFlorin/skill-hub
 
 go 1.25
 

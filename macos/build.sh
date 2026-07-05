@@ -27,7 +27,7 @@ mkdir -p "${BUILD_DIR}"
 # 1. Build the Go skillhub binary (universal unless --arch).
 echo "==> Building skillhub CLI binary"
 VERSION="$(cd "${REPO_ROOT}" && git describe --tags --always 2>/dev/null || echo dev)"
-LDFLAGS="-s -w -X github.com/cassian/skill-hub/internal/cli.Version=${VERSION}"
+LDFLAGS="-s -w -X github.com/CassianFlorin/skill-hub/internal/cli.Version=${VERSION}"
 if [[ "${HOST_ONLY}" == "1" ]]; then
     (cd "${REPO_ROOT}" && go build -ldflags "${LDFLAGS}" -o "${BUILD_DIR}/skillhub" ./cmd/skillhub)
 else
