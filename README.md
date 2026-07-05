@@ -305,7 +305,7 @@ skillhub publish ./skills/git-commit-cn --registry company
 skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
 ```
 
-Before writing anything, publish checks that `skill.yaml` declares an explicit `version`, a `description`, at least one supported target, and a `namespace` or `author`, then computes the package checksum. Republishing the same version with different content is rejected; bump the version instead.
+Before writing anything, publish checks that `skill.yaml` declares an explicit `version`, a `description`, at least one supported target, and a `namespace` or `author`, then computes the package checksum. Republishing the same version with different content is rejected, and semver versions lower than the published entry are rejected; bump the version instead.
 
 - Local registries are updated in place.
 - Git registries are cloned to a temporary workspace, committed, and pushed. Use `--branch` to push a review branch for pull-request flows; direct pushes require write access to the registry repository.

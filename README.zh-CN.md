@@ -285,7 +285,7 @@ skillhub publish ./skills/git-commit-cn --registry company
 skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
 ```
 
-发布前会检查 `skill.yaml` 是否声明了明确的 `version`、`description`、至少一个受支持的 target，以及 `namespace` 或 `author`，并计算包 checksum。用不同内容重复发布同一版本会被拒绝，请提升版本号。
+发布前会检查 `skill.yaml` 是否声明了明确的 `version`、`description`、至少一个受支持的 target，以及 `namespace` 或 `author`，并计算包 checksum。用不同内容重复发布同一版本会被拒绝，低于已发布条目的 semver 版本号也会被拒绝，请提升版本号。
 
 - 本地注册表直接原地更新。
 - Git 注册表会克隆到临时工作区后提交并推送。在 PR 流程中使用 `--branch` 推送评审分支；直接推送需要注册表仓库的写权限。

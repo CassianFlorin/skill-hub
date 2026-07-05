@@ -125,6 +125,11 @@ func Publish(workDir string, skillPath string, opts Options) (Result, error) {
 		}
 		return Result{}, fmt.Errorf("%s@%s already published with different content; bump the version in skill.yaml", identity, meta.Version)
 	}
+	if oldEntry != nil {
+		if cmp, comparable := compareSemver(meta.Version, oldEntry.Version); comparable && cmp < 0 {
+			return Result{}, fmt.Errorf("%s version %s is lower than published %s; publish a higher version", identity, meta.Version, oldEntry.Version)
+		}
+	}
 
 	dest, err := resolveDest(root, opts.Dest, oldEntry, meta)
 	if err != nil {
@@ -235,6 +240,66 @@ func validatePublishable(meta skill.Metadata) error {
 		return fmt.Errorf("could not resolve a namespace for this skill")
 	}
 	return nil
+}
+
+// compareSemver returns -1/0/1 when both versions parse as semver
+// (optional "v" prefix, MAJOR.MINOR.PATCH, optional -prerelease).
+// comparable is false when either version does not parse, in which
+// case the caller should skip ordering checks.
+func compareSemver(left string, right string) (int, bool) {
+	leftParts, leftPre, ok := parseSemver(left)
+	if !ok {
+		return 0, false
+	}
+	rightParts, rightPre, ok := parseSemver(right)
+	if !ok {
+		return 0, false
+	}
+	for i := 0; i < 3; i++ {
+		if leftParts[i] != rightParts[i] {
+			if leftParts[i] < rightParts[i] {
+				return -1, true
+			}
+			return 1, true
+		}
+	}
+	switch {
+	case leftPre == rightPre:
+		return 0, true
+	case leftPre == "":
+		return 1, true
+	case rightPre == "":
+		return -1, true
+	case leftPre < rightPre:
+		return -1, true
+	default:
+		return 1, true
+	}
+}
+
+func parseSemver(version string) ([3]int, string, bool) {
+	version = strings.TrimPrefix(version, "v")
+	version, prerelease, _ := strings.Cut(version, "-")
+	version, _, _ = strings.Cut(version, "+")
+	fields := strings.Split(version, ".")
+	if len(fields) != 3 {
+		return [3]int{}, "", false
+	}
+	var parts [3]int
+	for i, field := range fields {
+		if field == "" {
+			return [3]int{}, "", false
+		}
+		value := 0
+		for _, char := range field {
+			if char < '0' || char > '9' {
+				return [3]int{}, "", false
+			}
+			value = value*10 + int(char-'0')
+		}
+		parts[i] = value
+	}
+	return parts, prerelease, true
 }
 
 func validateTrust(level string) error {
