@@ -89,6 +89,8 @@ type updatePlanJSON struct {
 	DeployedTo       []string `json:"deployed_to,omitempty"`
 	Held             bool     `json:"held"`
 	HoldReason       string   `json:"hold_reason,omitempty"`
+	Major            bool     `json:"major"`
+	Breaking         bool     `json:"breaking"`
 }
 
 func updatePlanJSONList(plans []install.UpdatePlan) []updatePlanJSON {
@@ -105,6 +107,8 @@ func updatePlanJSONList(plans []install.UpdatePlan) []updatePlanJSON {
 			DeployedTo:       p.DeployedTo,
 			Held:             p.Held,
 			HoldReason:       p.HoldReason,
+			Major:            p.Major,
+			Breaking:         p.Breaking,
 		})
 	}
 	return out

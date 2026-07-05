@@ -72,7 +72,8 @@ type HoldState struct {
 }
 
 type UpdateOptions struct {
-	Identity string
+	Identity   string
+	AllowMajor bool
 }
 
 type UpdatePlan struct {
@@ -89,6 +90,8 @@ type UpdatePlan struct {
 	DeployedTo       []string
 	Held             bool
 	HoldReason       string
+	Major            bool
+	Breaking         bool
 }
 
 type RollbackOptions struct {
@@ -362,37 +365,35 @@ func HeldSkills() ([]LockedSkill, error) {
 	return held, nil
 }
 
-func UpdateAll() ([][3]string, error) {
-	lock, err := LoadLock()
-	if err != nil {
-		return nil, err
-	}
-	changes, err := updateLock(&lock, false)
-	if err != nil {
-		return nil, err
-	}
-	if err := SaveLock(lock); err != nil {
-		return nil, err
-	}
-	return changes, nil
+type SkippedUpdate struct {
+	Identity         string
+	CurrentVersion   string
+	AvailableVersion string
+	Reason           string
 }
 
-func UpdateOne(identity string) ([][3]string, error) {
+func Update(options UpdateOptions) ([][3]string, []SkippedUpdate, error) {
 	lock, err := LoadLock()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if _, ok := lock.find(identity); !ok {
-		return nil, fmt.Errorf("unknown installed skill %q", identity)
+	if options.Identity != "" {
+		if _, ok := lock.find(options.Identity); !ok {
+			return nil, nil, fmt.Errorf("unknown installed skill %q", options.Identity)
+		}
 	}
-	changes, err := updateLock(&lock, false, identity)
+	identities := []string{}
+	if options.Identity != "" {
+		identities = append(identities, options.Identity)
+	}
+	changes, skipped, err := updateLock(&lock, false, options.AllowMajor, identities...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := SaveLock(lock); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return changes, nil
+	return changes, skipped, nil
 }
 
 func PlanUpdates() ([][3]string, error) {
@@ -445,6 +446,8 @@ func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, erro
 			AvailablePath:    resolved.SourcePath,
 			Targets:          meta.Targets,
 			DeployedTo:       locked.DeployedTo,
+			Major:            skill.IsMajorBump(locked.Version, meta.Version),
+			Breaking:         meta.Breaking,
 		}
 		if locked.Hold != nil {
 			plan.Held = true
@@ -460,19 +463,20 @@ func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, erro
 	return plans, nil
 }
 
-func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string, error) {
+func updateLock(lock *LockFile, dryRun bool, allowMajor bool, identities ...string) ([][3]string, []SkippedUpdate, error) {
 	filter := ""
 	if len(identities) > 0 {
 		filter = identities[0]
 	}
 	var changes [][3]string
+	var skipped []SkippedUpdate
 	for i, locked := range lock.Skills {
 		if filter != "" && locked.DisplayIdentity() != filter && locked.Name != filter {
 			continue
 		}
 		resolved, err := resolveUpdateSource(locked, dryRun)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !dryRun {
 			lock.Skills[i].SourcePath = resolved.SourcePath
@@ -482,7 +486,7 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 		}
 		meta, err := skill.LoadCompatibleMetadata(resolved.SourcePath, resolved.SourceRegistry)
 		if err != nil {
-			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
+			return nil, nil, fmt.Errorf("update %s: %w", locked.Name, err)
 		}
 		if meta.Version == locked.Version {
 			continue
@@ -491,26 +495,37 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 			continue
 		}
 		if err := checkSkillhubRequirement(meta, locked.DisplayIdentity()); err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if !allowMajor {
+			if reason := confirmationReason(locked.Version, meta); reason != "" {
+				skipped = append(skipped, SkippedUpdate{
+					Identity:         locked.DisplayIdentity(),
+					CurrentVersion:   locked.Version,
+					AvailableVersion: meta.Version,
+					Reason:           reason,
+				})
+				continue
+			}
 		}
 		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})
 		if dryRun {
 			continue
 		}
 		if err := saveHistory(locked); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := copyDir(resolved.SourcePath, locked.InstalledPath); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if meta.Generated {
 			if err := skill.WriteGeneratedMetadata(locked.InstalledPath, meta); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		checksum, err := skill.ChecksumDir(locked.InstalledPath)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		identity := skill.Identity(meta.Namespace, meta.Name)
 		lock.Skills[i].Identity = identity
@@ -522,7 +537,19 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 		lock.Skills[i].Checksum = checksum
 		lock.Skills[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	return changes, nil
+	return changes, skipped, nil
+}
+
+// confirmationReason reports why an update needs explicit confirmation
+// (--major), or "" when it can be applied automatically.
+func confirmationReason(currentVersion string, meta skill.Metadata) string {
+	if meta.Breaking {
+		return "breaking change"
+	}
+	if skill.IsMajorBump(currentVersion, meta.Version) {
+		return "major update"
+	}
+	return ""
 }
 
 func resolveUpdateSource(locked LockedSkill, dryRun bool) (LockedSkill, error) {

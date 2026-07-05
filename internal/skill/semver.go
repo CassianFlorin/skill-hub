@@ -40,6 +40,20 @@ func CompareSemver(left string, right string) (int, bool) {
 	}
 }
 
+// IsMajorBump reports whether next raises the major version above
+// current. Returns false when either version does not parse as semver.
+func IsMajorBump(current string, next string) bool {
+	currentParts, _, ok := parseSemver(current)
+	if !ok {
+		return false
+	}
+	nextParts, _, ok := parseSemver(next)
+	if !ok {
+		return false
+	}
+	return nextParts[0] > currentParts[0]
+}
+
 // ValidateConstraint checks that a requires constraint is well formed.
 // A constraint is one or more comma-separated clauses, each an operator
 // (>=, >, <=, <, =, or none meaning exact) followed by a semver version.

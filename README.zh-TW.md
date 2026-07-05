@@ -382,6 +382,15 @@ requires:
 
 `requires.skillhub` 會被強制校驗：目前執行的 skillhub 版本不滿足約束時，`install` 和 `update` 會拒絕執行（dev 建置跳過檢查）。其餘 `requires.*` 條目會做語法校驗、記錄到註冊表索引中，並由 `skillhub info` 展示。
 
+版本還可以宣告自身為破壞性變更：
+
+```yaml
+compatibility:
+  breaking: true
+```
+
+`skillhub update` 會自動套用 patch 和 minor 更新；major 版本跳躍或標記了 `compatibility.breaking` 的版本會被跳過並給出提示，需用 `skillhub update <identity> --major` 明確套用。
+
 只包含 `SKILL.md` 的既有 Skill 目錄仍然可以安裝。skill-hub 會在已安裝副本中寫入產生的 `skill.yaml`，這樣鎖定檔和部署流程可以使用同一套中繼資料模型。
 
 已安裝 Skill identity 的顯示格式為 `namespace/name`，namespace 按以下優先順序決定：

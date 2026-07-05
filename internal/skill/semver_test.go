@@ -129,3 +129,54 @@ func TestLoadMetadataRequiresEntryWithoutValueFails(t *testing.T) {
 		t.Error("expected error for requires entry without constraint")
 	}
 }
+
+func TestIsMajorBump(t *testing.T) {
+	cases := []struct {
+		current string
+		next    string
+		want    bool
+	}{
+		{"1.2.0", "2.0.0", true},
+		{"1.2.0", "1.9.9", false},
+		{"1.2.0", "1.3.0", false},
+		{"2.0.0", "1.9.0", false},
+		{"v1.0.0", "v2.0.0", true},
+		{"unversioned", "2.0.0", false},
+		{"1.0.0", "latest", false},
+	}
+	for _, testCase := range cases {
+		if got := IsMajorBump(testCase.current, testCase.next); got != testCase.want {
+			t.Errorf("IsMajorBump(%q, %q) = %v, want %v", testCase.current, testCase.next, got, testCase.want)
+		}
+	}
+}
+
+func TestLoadMetadataCompatibilityBreaking(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: demo
+version: 2.0.0
+description: Demo
+targets:
+- codex
+compatibility:
+  breaking: true
+tags:
+- demo
+`
+	if err := os.WriteFile(filepath.Join(dir, "skill.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write skill.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# demo\n"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+	meta, err := LoadMetadata(dir)
+	if err != nil {
+		t.Fatalf("LoadMetadata: %v", err)
+	}
+	if !meta.Breaking {
+		t.Error("compatibility.breaking not parsed")
+	}
+	if len(meta.Tags) != 1 || meta.Tags[0] != "demo" {
+		t.Errorf("tags after compatibility block = %v", meta.Tags)
+	}
+}

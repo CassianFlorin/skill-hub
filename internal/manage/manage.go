@@ -164,13 +164,13 @@ func Execute(workDir string, request OperationRequest) (OperationResult, error) 
 			Message: "installed " + locked.DisplayIdentity() + "@" + locked.Version,
 		}, nil
 	case OperationUpdate:
-		changes, err := install.UpdateAll()
+		changes, skipped, err := install.Update(install.UpdateOptions{})
 		if err != nil {
 			return OperationResult{}, err
 		}
 		return OperationResult{
 			Command: "skillhub update",
-			Message: updateMessage(changes),
+			Message: updateMessage(changes, skipped),
 		}, nil
 	case OperationDeploy:
 		runtime := request.Runtime
@@ -239,15 +239,20 @@ func deployMessage(results []deploy.Result) string {
 	return strings.Join(parts, "; ")
 }
 
-func updateMessage(changes [][3]string) string {
-	if len(changes) == 0 {
+func updateMessage(changes [][3]string, skipped []install.SkippedUpdate) string {
+	if len(changes) == 0 && len(skipped) == 0 {
 		return "all installed Skills already up to date"
 	}
 	var parts []string
 	for _, change := range changes {
 		parts = append(parts, change[0]+" "+change[1]+" -> "+change[2])
 	}
-	parts = append(parts, "runtime copies were not changed")
+	for _, skip := range skipped {
+		parts = append(parts, "skipped "+skip.Identity+" "+skip.CurrentVersion+" -> "+skip.AvailableVersion+" ("+skip.Reason+"; run skillhub update "+skip.Identity+" --major)")
+	}
+	if len(changes) > 0 {
+		parts = append(parts, "runtime copies were not changed")
+	}
 	return strings.Join(parts, "; ")
 }
 

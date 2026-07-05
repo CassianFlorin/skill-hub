@@ -161,3 +161,103 @@ func TestInstallRejectsUnsatisfiedSkillhubRequirement(t *testing.T) {
 		t.Errorf("satisfied requirement should install, got %v", err)
 	}
 }
+
+func writeUpdatePolicySkill(t *testing.T, dir string, version string, breaking bool) {
+	t.Helper()
+	yaml := "name: policy\nnamespace: acme\nversion: " + version + "\ndescription: d\ntargets:\n- codex\n"
+	if breaking {
+		yaml += "compatibility:\n  breaking: true\n"
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skill.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write skill.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# policy\n"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+}
+
+func TestUpdateSkipsMajorWithoutConfirmation(t *testing.T) {
+	t.Setenv("SKILLHUB_HOME", t.TempDir())
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "policy")
+	writeUpdatePolicySkill(t, sourceDir, "1.0.0", false)
+	if _, err := Install(workDir, sourceDir); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	writeUpdatePolicySkill(t, sourceDir, "2.0.0", false)
+	changes, skipped, err := Update(UpdateOptions{})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if len(changes) != 0 {
+		t.Errorf("major update applied without --major: %v", changes)
+	}
+	if len(skipped) != 1 || skipped[0].Reason != "major update" || skipped[0].AvailableVersion != "2.0.0" {
+		t.Fatalf("skipped = %+v", skipped)
+	}
+
+	changes, skipped, err = Update(UpdateOptions{AllowMajor: true})
+	if err != nil {
+		t.Fatalf("update --major: %v", err)
+	}
+	if len(changes) != 1 || len(skipped) != 0 {
+		t.Fatalf("changes = %v, skipped = %v", changes, skipped)
+	}
+	lock, err := LoadLock()
+	if err != nil {
+		t.Fatalf("LoadLock: %v", err)
+	}
+	if lock.Skills[0].Version != "2.0.0" {
+		t.Errorf("lock version = %q, want 2.0.0", lock.Skills[0].Version)
+	}
+}
+
+func TestUpdateSkipsBreakingMinorWithoutConfirmation(t *testing.T) {
+	t.Setenv("SKILLHUB_HOME", t.TempDir())
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "policy")
+	writeUpdatePolicySkill(t, sourceDir, "1.0.0", false)
+	if _, err := Install(workDir, sourceDir); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	writeUpdatePolicySkill(t, sourceDir, "1.1.0", true)
+	changes, skipped, err := Update(UpdateOptions{})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if len(changes) != 0 || len(skipped) != 1 || skipped[0].Reason != "breaking change" {
+		t.Fatalf("changes = %v, skipped = %+v", changes, skipped)
+	}
+
+	changes, _, err = Update(UpdateOptions{AllowMajor: true})
+	if err != nil {
+		t.Fatalf("update --major: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("breaking update not applied with --major: %v", changes)
+	}
+}
+
+func TestUpdateAppliesMinorAutomatically(t *testing.T) {
+	t.Setenv("SKILLHUB_HOME", t.TempDir())
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "policy")
+	writeUpdatePolicySkill(t, sourceDir, "1.0.0", false)
+	if _, err := Install(workDir, sourceDir); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	writeUpdatePolicySkill(t, sourceDir, "1.2.3", false)
+	changes, skipped, err := Update(UpdateOptions{})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if len(changes) != 1 || len(skipped) != 0 {
+		t.Fatalf("changes = %v, skipped = %v", changes, skipped)
+	}
+}

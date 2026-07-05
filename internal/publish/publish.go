@@ -339,6 +339,7 @@ func buildEntry(meta skill.Metadata, identity string, checksum string, dest stri
 		Targets:     meta.Targets,
 		Tags:        meta.Tags,
 		Requires:    meta.Requires,
+		Breaking:    meta.Breaking,
 		Source:      registry.IndexSource{Type: registry.SourceTypeRegistry, Path: dest},
 		Trust:       registry.IndexTrust{Level: registry.TrustPrivate},
 		UpdatedAt:   now,

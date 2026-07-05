@@ -21,6 +21,7 @@ type Metadata struct {
 	Targets     []string
 	Tags        []string
 	Requires    map[string]string
+	Breaking    bool
 	Generated   bool
 }
 
@@ -68,12 +69,19 @@ func LoadMetadata(dir string) (Metadata, error) {
 			meta.Requires[key] = value
 			continue
 		}
+		if indented && mapKey == "compatibility" {
+			if key == "breaking" {
+				meta.Breaking = value == "true"
+			}
+			continue
+		}
 		listKey = ""
 		mapKey = ""
 		if value == "" {
-			if key == "requires" {
+			switch key {
+			case "requires", "compatibility":
 				mapKey = key
-			} else {
+			default:
 				listKey = key
 			}
 			continue

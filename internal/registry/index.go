@@ -44,6 +44,7 @@ type IndexSkill struct {
 	Targets     []string          `json:"targets"`
 	Tags        []string          `json:"tags,omitempty"`
 	Requires    map[string]string `json:"requires,omitempty"`
+	Breaking    bool              `json:"breaking,omitempty"`
 	Source      IndexSource       `json:"source"`
 	Maintainers []string          `json:"maintainers,omitempty"`
 	License     string            `json:"license,omitempty"`
@@ -353,6 +354,7 @@ func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
 			Targets:     meta.Targets,
 			Tags:        meta.Tags,
 			Requires:    meta.Requires,
+			Breaking:    meta.Breaking,
 			Source:      IndexSource{Type: SourceTypeRegistry, Path: filepath.ToSlash(entry.Name())},
 			Maintainers: maintainersFrom(meta),
 			Trust:       IndexTrust{Level: TrustPrivate},

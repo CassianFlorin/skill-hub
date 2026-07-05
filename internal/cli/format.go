@@ -92,6 +92,7 @@ func formatInfoResult(result registry.SearchResult, installCommand string) strin
 		{"targets", strings.Join(indexed.Targets, ", ")},
 		{"tags", strings.Join(indexed.Tags, ", ")},
 		{"requires", formatRequires(indexed.Requires)},
+		{"breaking", fmt.Sprintf("%t", indexed.Breaking)},
 		{"source.type", indexed.Source.Type},
 		{"source.url", indexed.Source.URL},
 		{"source.path", indexed.Source.Path},
