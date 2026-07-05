@@ -283,16 +283,17 @@ skillhub uninstall platform-team/java-review --deployed
 skillhub publish ./skills/git-commit-cn --registry company --dry-run
 skillhub publish ./skills/git-commit-cn --registry company
 skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
+skillhub publish ./skills/git-commit-cn --registry hub --pr
 ```
 
 发布前会检查 `skill.yaml` 是否声明了明确的 `version`、`description`、至少一个受支持的 target，以及 `namespace` 或 `author`，并计算包 checksum。用不同内容重复发布同一版本会被拒绝，低于已发布条目的 semver 版本号也会被拒绝，请提升版本号。
 
 - 本地注册表直接原地更新。
-- Git 注册表会克隆到临时工作区后提交并推送。在 PR 流程中使用 `--branch` 推送评审分支；直接推送需要注册表仓库的写权限。
+- Git 注册表会克隆到临时工作区后提交并推送。有写权限时可用 `--branch` 推送评审分支；使用 `--pr` 会在需要时自动 fork 注册表并通过 `gh` CLI 创建 Pull Request。
 - `--dry-run` 仅打印 index 条目差异，不写入。
 - 更新会保留已有的 `trust`、`featured` 和 `license` 审核元数据；用 `--trust` 显式覆盖信任级别。
 
-要发布到公共目录，请按照 [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry) 的 Pull Request 流程提交，而不是直接推送。
+要发布到公共目录，可对 hub 注册表运行 `skillhub publish --pr`（需要已登录的 `gh` CLI），或按照 [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry) 的手动 Pull Request 流程提交。
 
 ## 运行时部署
 

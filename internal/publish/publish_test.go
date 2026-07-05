@@ -383,3 +383,140 @@ func TestPublishGitPushesReviewBranch(t *testing.T) {
 		t.Errorf("main branch should not have the index yet: %v", err)
 	}
 }
+
+func TestParseGitHubRepo(t *testing.T) {
+	cases := []struct {
+		url   string
+		owner string
+		repo  string
+		ok    bool
+	}{
+		{"https://github.com/acme/skills.git", "acme", "skills", true},
+		{"https://github.com/acme/skills", "acme", "skills", true},
+		{"git@github.com:acme/skills.git", "acme", "skills", true},
+		{"ssh://git@github.com/acme/skills.git", "acme", "skills", true},
+		{"https://gitlab.com/acme/skills.git", "", "", false},
+		{"https://github.com/acme", "", "", false},
+	}
+	for _, testCase := range cases {
+		owner, repo, err := parseGitHubRepo(testCase.url)
+		if testCase.ok && (err != nil || owner != testCase.owner || repo != testCase.repo) {
+			t.Errorf("parseGitHubRepo(%q) = (%q, %q, %v)", testCase.url, owner, repo, err)
+		}
+		if !testCase.ok && err == nil {
+			t.Errorf("parseGitHubRepo(%q) expected error", testCase.url)
+		}
+	}
+}
+
+type ghCall struct {
+	args []string
+}
+
+func stubGH(t *testing.T, login string, prURL string) *[]ghCall {
+	t.Helper()
+	calls := &[]ghCall{}
+	previousRunGH := runGH
+	previousResolve := resolveGitHubRepo
+	runGH = func(dir string, args ...string) (string, error) {
+		*calls = append(*calls, ghCall{args: args})
+		switch args[0] {
+		case "api":
+			return login + "\n", nil
+		case "repo":
+			return "created fork\n", nil
+		case "pr":
+			return prURL + "\n", nil
+		default:
+			return "", nil
+		}
+	}
+	resolveGitHubRepo = func(url string) (string, string, error) {
+		return "acme", "registry", nil
+	}
+	t.Cleanup(func() {
+		runGH = previousRunGH
+		resolveGitHubRepo = previousResolve
+	})
+	return calls
+}
+
+func lastGHArgs(calls []ghCall) []string {
+	if len(calls) == 0 {
+		return nil
+	}
+	return calls[len(calls)-1].args
+}
+
+func TestPublishPRForkFlow(t *testing.T) {
+	workDir, _ := setupGitRegistry(t)
+	forkBare := filepath.Join(t.TempDir(), "fork.git")
+	if err := os.MkdirAll(forkBare, 0o755); err != nil {
+		t.Fatalf("mkdir fork bare: %v", err)
+	}
+	gitRun(t, forkBare, "init", "--bare", "--initial-branch=main")
+	calls := stubGH(t, "contributor", "https://github.com/acme/registry/pull/7")
+	previousForkURL := forkPushURL
+	forkPushURL = func(login string, repo string) string { return forkBare }
+	t.Cleanup(func() { forkPushURL = previousForkURL })
+
+	skillDir := writeSkill(t, t.TempDir(), "review", "1.0.0", "# review\n")
+	result, err := Publish(workDir, skillDir, Options{Registry: "team", PR: true})
+	if err != nil {
+		t.Fatalf("Publish --pr: %v", err)
+	}
+	if result.PRURL != "https://github.com/acme/registry/pull/7" {
+		t.Errorf("PRURL = %q", result.PRURL)
+	}
+	wantBranch := "publish/acme__review-1.0.0"
+	if result.Branch != wantBranch {
+		t.Errorf("Branch = %q, want %q", result.Branch, wantBranch)
+	}
+
+	prArgs := lastGHArgs(*calls)
+	if len(prArgs) < 6 || prArgs[0] != "pr" || prArgs[1] != "create" {
+		t.Fatalf("last gh call = %v", prArgs)
+	}
+	joined := strings.Join(prArgs, " ")
+	if !strings.Contains(joined, "--repo acme/registry") || !strings.Contains(joined, "--head contributor:"+wantBranch) {
+		t.Errorf("gh pr create args = %v", prArgs)
+	}
+
+	verify := filepath.Join(t.TempDir(), "verify-fork")
+	gitRun(t, filepath.Dir(verify), "clone", "--branch", wantBranch, forkBare, verify)
+	if _, err := registry.LoadIndex(verify); err != nil {
+		t.Fatalf("LoadIndex from fork branch: %v", err)
+	}
+}
+
+func TestPublishPROwnerPushesUpstream(t *testing.T) {
+	workDir, bare := setupGitRegistry(t)
+	calls := stubGH(t, "acme", "https://github.com/acme/registry/pull/8")
+
+	skillDir := writeSkill(t, t.TempDir(), "review", "1.0.0", "# review\n")
+	result, err := Publish(workDir, skillDir, Options{Registry: "team", PR: true, Branch: "publish/review"})
+	if err != nil {
+		t.Fatalf("Publish --pr as owner: %v", err)
+	}
+	if result.PRURL == "" || result.Branch != "publish/review" {
+		t.Errorf("unexpected result: %+v", result)
+	}
+	joined := strings.Join(lastGHArgs(*calls), " ")
+	if !strings.Contains(joined, "--head publish/review") || strings.Contains(joined, "--head acme:") {
+		t.Errorf("owner flow should push upstream head: %v", joined)
+	}
+
+	verify := filepath.Join(t.TempDir(), "verify-upstream")
+	gitRun(t, filepath.Dir(verify), "clone", "--branch", "publish/review", bare, verify)
+	if _, err := registry.LoadIndex(verify); err != nil {
+		t.Fatalf("LoadIndex from upstream branch: %v", err)
+	}
+}
+
+func TestPublishPRRequiresGitRegistry(t *testing.T) {
+	workDir, _ := setupLocalRegistry(t)
+	skillDir := writeSkill(t, t.TempDir(), "review", "1.0.0", "# review\n")
+	if _, err := Publish(workDir, skillDir, Options{Registry: "company", PR: true}); err == nil || !strings.Contains(err.Error(), "--pr requires a git registry") {
+		t.Errorf("expected git registry error, got %v", err)
+	}
+}

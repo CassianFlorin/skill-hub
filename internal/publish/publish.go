@@ -27,6 +27,7 @@ type Options struct {
 	Branch   string
 	Message  string
 	DryRun   bool
+	PR       bool
 }
 
 type Result struct {
@@ -43,6 +44,7 @@ type Result struct {
 	Pushed    bool
 	Branch    string
 	CommitMsg string
+	PRURL     string
 }
 
 func Publish(workDir string, skillPath string, opts Options) (Result, error) {
@@ -77,6 +79,9 @@ func Publish(workDir string, skillPath string, opts Options) (Result, error) {
 	reg, ok := cfg.Registries[opts.Registry]
 	if !ok {
 		return Result{}, fmt.Errorf("unknown registry %q", opts.Registry)
+	}
+	if opts.PR && reg.Type != "git" {
+		return Result{}, fmt.Errorf("--pr requires a git registry, %q is %s", opts.Registry, reg.Type)
 	}
 
 	var root string
@@ -199,8 +204,13 @@ func Publish(workDir string, skillPath string, opts Options) (Result, error) {
 		message = fmt.Sprintf("publish %s@%s", identity, meta.Version)
 	}
 	result.CommitMsg = message
-	if opts.Branch != "" {
-		if err := runGit(root, "checkout", "-B", opts.Branch); err != nil {
+	branch := opts.Branch
+	if opts.PR && branch == "" {
+		branch = "publish/" + skill.SafeIdentity(identity) + "-" + meta.Version
+	}
+	result.Branch = branch
+	if branch != "" {
+		if err := runGit(root, "checkout", "-B", branch); err != nil {
 			return Result{}, err
 		}
 	}
@@ -210,8 +220,25 @@ func Publish(workDir string, skillPath string, opts Options) (Result, error) {
 	if err := runGit(root, "commit", "-m", message); err != nil {
 		return Result{}, err
 	}
+	if opts.PR {
+		prURL, err := createPullRequest(root, prRequest{
+			RegistryURL: reg.URL,
+			Branch:      branch,
+			Title:       message,
+			Identity:    identity,
+			Version:     meta.Version,
+			Dest:        dest,
+			Checksum:    checksum,
+		})
+		if err != nil {
+			return Result{}, err
+		}
+		result.Pushed = true
+		result.PRURL = prURL
+		return result, nil
+	}
 	if err := runGit(root, "push", "origin", "HEAD"); err != nil {
-		return Result{}, fmt.Errorf("%w\nif you lack write access to this registry, publish through a fork and open a pull request; use --branch to push a review branch when you have write access", err)
+		return Result{}, fmt.Errorf("%w\nif you lack write access to this registry, use --pr to publish through a fork and pull request, or --branch to push a review branch when you have write access", err)
 	}
 	result.Pushed = true
 	return result, nil

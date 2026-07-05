@@ -9,7 +9,7 @@ import (
 	"github.com/CassianFlorin/skill-hub/internal/registry"
 )
 
-const publishUsage = "usage: skillhub publish <skill-path> --registry <name> [--dest <path>] [--trust <level>] [--branch <name>] [--message <text>] [--dry-run] [--json]"
+const publishUsage = "usage: skillhub publish <skill-path> --registry <name> [--dest <path>] [--trust <level>] [--branch <name>] [--message <text>] [--pr] [--dry-run] [--json]"
 
 type publishJSON struct {
 	Identity  string               `json:"identity"`
@@ -22,6 +22,7 @@ type publishJSON struct {
 	Pushed    bool                 `json:"pushed"`
 	Branch    string               `json:"branch,omitempty"`
 	CommitMsg string               `json:"commit_message,omitempty"`
+	PRURL     string               `json:"pr_url,omitempty"`
 	OldEntry  *registry.IndexSkill `json:"old_entry,omitempty"`
 	NewEntry  registry.IndexSkill  `json:"new_entry"`
 }
@@ -51,6 +52,8 @@ func runPublish(args []string, stdout io.Writer, workDir string) error {
 			case "--message":
 				opts.Message = value
 			}
+		case "--pr":
+			opts.PR = true
 		case "--dry-run":
 			opts.DryRun = true
 		case "--json":
@@ -81,6 +84,7 @@ func runPublish(args []string, stdout io.Writer, workDir string) error {
 			Pushed:    result.Pushed,
 			Branch:    result.Branch,
 			CommitMsg: result.CommitMsg,
+			PRURL:     result.PRURL,
 			OldEntry:  result.OldEntry,
 			NewEntry:  result.NewEntry,
 		})
@@ -101,6 +105,9 @@ func runPublish(args []string, stdout io.Writer, workDir string) error {
 			branch = "default branch"
 		}
 		_, _ = fmt.Fprintf(stdout, "pushed commit %q to %s\n", result.CommitMsg, branch)
+	}
+	if result.PRURL != "" {
+		_, _ = fmt.Fprintf(stdout, "opened pull request %s\n", result.PRURL)
 	}
 	return nil
 }

@@ -303,16 +303,17 @@ By default, uninstall removes the installed store copy and lockfile entry only. 
 skillhub publish ./skills/git-commit-cn --registry company --dry-run
 skillhub publish ./skills/git-commit-cn --registry company
 skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
+skillhub publish ./skills/git-commit-cn --registry hub --pr
 ```
 
 Before writing anything, publish checks that `skill.yaml` declares an explicit `version`, a `description`, at least one supported target, and a `namespace` or `author`, then computes the package checksum. Republishing the same version with different content is rejected, and semver versions lower than the published entry are rejected; bump the version instead.
 
 - Local registries are updated in place.
-- Git registries are cloned to a temporary workspace, committed, and pushed. Use `--branch` to push a review branch for pull-request flows; direct pushes require write access to the registry repository.
+- Git registries are cloned to a temporary workspace, committed, and pushed. Use `--branch` to push a review branch when you have write access, or `--pr` to fork the registry (when needed) and open a pull request through the `gh` CLI.
 - `--dry-run` prints the index entry diff without writing.
 - Updates preserve existing `trust`, `featured`, and `license` review metadata; override trust explicitly with `--trust`.
 
-To publish into the public catalog, follow the pull-request workflow in [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry) instead of pushing directly.
+To publish into the public catalog, run `skillhub publish --pr` against the hub registry (requires an authenticated `gh` CLI), or follow the manual pull-request workflow in [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry).
 
 ## Runtime Deploy
 
