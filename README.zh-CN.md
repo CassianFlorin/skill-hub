@@ -121,6 +121,7 @@ skillhub search java
 skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn@v0.1.0
+skillhub publish ./skills/git-commit-cn --registry company
 skillhub list
 skillhub list --scope all
 skillhub list --scope project
@@ -273,6 +274,25 @@ skillhub uninstall platform-team/java-review --deployed
 ```
 
 默认情况下，卸载只会移除已安装存储副本和锁文件记录。使用 `--deployed` 可以同时移除 Codex、Claude、Gemini 和 Hermes 运行时副本。
+
+## 发布 Skill
+
+`skillhub publish` 一步完成本地 Skill 包校验、复制进注册表并更新 `skillhub.index.json`：
+
+```bash
+skillhub publish ./skills/git-commit-cn --registry company --dry-run
+skillhub publish ./skills/git-commit-cn --registry company
+skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
+```
+
+发布前会检查 `skill.yaml` 是否声明了明确的 `version`、`description`、至少一个受支持的 target，以及 `namespace` 或 `author`，并计算包 checksum。用不同内容重复发布同一版本会被拒绝，请提升版本号。
+
+- 本地注册表直接原地更新。
+- Git 注册表会克隆到临时工作区后提交并推送。在 PR 流程中使用 `--branch` 推送评审分支；直接推送需要注册表仓库的写权限。
+- `--dry-run` 仅打印 index 条目差异，不写入。
+- 更新会保留已有的 `trust`、`featured` 和 `license` 审核元数据；用 `--trust` 显式覆盖信任级别。
+
+要发布到公共目录，请按照 [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry) 的 Pull Request 流程提交，而不是直接推送。
 
 ## 运行时部署
 

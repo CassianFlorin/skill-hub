@@ -269,6 +269,37 @@ func ResolveIndexedSkill(root string, spec string) (IndexSkill, bool, error) {
 	return IndexSkill{}, false, nil
 }
 
+func ValidTarget(target string) bool {
+	return validTarget(target)
+}
+
+func ValidTrustLevel(level string) bool {
+	return validTrustLevel(level)
+}
+
+func WriteIndex(root string, index Index) error {
+	if err := validateCatalogSchema(index); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(root, IndexFileName), data, 0o644)
+}
+
+func ValidateLoadedIndex(root string, name string) (int, error) {
+	index, err := LoadIndex(root)
+	if err != nil {
+		return 0, err
+	}
+	if err := validateRegistrySources(root, name, index); err != nil {
+		return 0, err
+	}
+	return len(index.Skills), nil
+}
+
 func LoadIndex(root string) (Index, error) {
 	data, err := os.ReadFile(filepath.Join(root, IndexFileName))
 	if err != nil {

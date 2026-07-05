@@ -45,6 +45,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		}
 		_, _ = fmt.Fprintf(stdout, "installed %s@%s\n", locked.DisplayIdentity(), locked.Version)
 		return nil
+	case "publish":
+		return runPublish(args[1:], stdout, workDir)
 	case "rollback":
 		return runRollback(args[1:], stdout)
 	case "history":

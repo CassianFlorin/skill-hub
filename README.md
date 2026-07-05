@@ -42,6 +42,7 @@ skill-hub separates local Skill state into three layers:
 - [Catalog Discovery](#catalog-discovery)
 - [Static Catalog Export](#static-catalog-export)
 - [Install, Update, And Rollback](#install-update-and-rollback)
+- [Publish A Skill](#publish-a-skill)
 - [Runtime Deploy](#runtime-deploy)
 - [Skill Package Format](#skill-package-format)
 - [Registry Index Format](#registry-index-format)
@@ -138,7 +139,7 @@ go build -o skillhub ./cmd/skillhub
 | Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub hold`, `skillhub holds`, `skillhub unhold`, `skillhub update`, `skillhub history`, `skillhub rollback`, `skillhub uninstall` |
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
-| Publication | `skillhub catalog export` |
+| Publication | `skillhub publish`, `skillhub catalog export` |
 
 Common examples:
 
@@ -293,6 +294,25 @@ Uninstall:
 ```
 
 By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, Gemini, and Hermes runtime copies.
+
+## Publish A Skill
+
+`skillhub publish` validates a local Skill package, copies it into a registry, and updates `skillhub.index.json` in one step:
+
+```bash
+skillhub publish ./skills/git-commit-cn --registry company --dry-run
+skillhub publish ./skills/git-commit-cn --registry company
+skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
+```
+
+Before writing anything, publish checks that `skill.yaml` declares an explicit `version`, a `description`, at least one supported target, and a `namespace` or `author`, then computes the package checksum. Republishing the same version with different content is rejected; bump the version instead.
+
+- Local registries are updated in place.
+- Git registries are cloned to a temporary workspace, committed, and pushed. Use `--branch` to push a review branch for pull-request flows; direct pushes require write access to the registry repository.
+- `--dry-run` prints the index entry diff without writing.
+- Updates preserve existing `trust`, `featured`, and `license` review metadata; override trust explicitly with `--trust`.
+
+To publish into the public catalog, follow the pull-request workflow in [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry) instead of pushing directly.
 
 ## Runtime Deploy
 
