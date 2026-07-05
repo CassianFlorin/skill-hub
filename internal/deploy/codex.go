@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/CassianFlorin/skill-hub/internal/audit"
 	"github.com/CassianFlorin/skill-hub/internal/install"
 	"github.com/CassianFlorin/skill-hub/internal/skill"
 )
@@ -84,23 +85,50 @@ func RuntimeNames() []string {
 }
 
 func DeployCodex(options Options) ([]Result, error) {
-	return deployRuntime("codex", options)
+	results, err := deployRuntime("codex", options)
+	recordDeployAudit("codex", results, err)
+	return results, err
 }
 
 func DeployClaude(options Options) ([]Result, error) {
-	return deployRuntime("claude", options)
+	results, err := deployRuntime("claude", options)
+	recordDeployAudit("claude", results, err)
+	return results, err
 }
 
 func DeployGemini(options Options) ([]Result, error) {
-	return deployRuntime("gemini", options)
+	results, err := deployRuntime("gemini", options)
+	recordDeployAudit("gemini", results, err)
+	return results, err
 }
 
 func DeployHermes(options Options) ([]Result, error) {
-	return deployRuntime("hermes", options)
+	results, err := deployRuntime("hermes", options)
+	recordDeployAudit("hermes", results, err)
+	return results, err
 }
 
 func DeployRuntime(runtime string, options Options) ([]Result, error) {
-	return deployRuntime(runtime, options)
+	results, err := deployRuntime(runtime, options)
+	recordDeployAudit(runtime, results, err)
+	return results, err
+}
+
+func recordDeployAudit(runtime string, results []Result, err error) {
+	if err != nil {
+		audit.RecordOutcome(audit.Event{Command: "deploy", Runtime: runtime}, err)
+		return
+	}
+	for _, result := range results {
+		if result.DryRun || result.State != StateDeployed {
+			continue
+		}
+		_ = audit.Record(audit.Event{
+			Command:  "deploy",
+			Identity: result.Identity,
+			Runtime:  result.Runtime,
+		})
+	}
 }
 
 func Statuses(runtime string) ([]Status, error) {

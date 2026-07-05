@@ -76,6 +76,8 @@ skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub deploy codex official/git-commit-cn --force
 skillhub deploy status
+
+skillhub audit --limit 20
 ```
 
 `skillhub help` 支援英語、簡體中文和繁體中文：
@@ -121,6 +123,7 @@ skillhub search java
 skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn@v0.1.0
+skillhub publish ./skills/git-commit-cn --registry company
 skillhub list
 skillhub list --scope all
 skillhub list --scope project
@@ -274,6 +277,26 @@ skillhub uninstall platform-team/java-review --deployed
 
 預設情況下，解除安裝只會移除已安裝儲存副本和鎖定檔記錄。使用 `--deployed` 可以同時移除 Codex、Claude、Gemini 和 Hermes 執行時副本。
 
+## 發佈 Skill
+
+`skillhub publish` 一步完成本地 Skill 套件校驗、複製進註冊表並更新 `skillhub.index.json`：
+
+```bash
+skillhub publish ./skills/git-commit-cn --registry company --dry-run
+skillhub publish ./skills/git-commit-cn --registry company
+skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
+skillhub publish ./skills/git-commit-cn --registry hub --pr
+```
+
+發佈前會檢查 `skill.yaml` 是否宣告了明確的 `version`、`description`、至少一個受支援的 target，以及 `namespace` 或 `author`，並計算套件 checksum。用不同內容重複發佈同一版本會被拒絕，低於已發佈條目的 semver 版本號也會被拒絕，請提升版本號。
+
+- 本機註冊表直接原地更新。
+- Git 註冊表會複製到暫存工作區後提交並推送。有寫入權限時可用 `--branch` 推送評審分支；使用 `--pr` 會在需要時自動 fork 註冊表並透過 `gh` CLI 建立 Pull Request。
+- `--dry-run` 僅列印 index 條目差異，不寫入。
+- 更新會保留既有的 `trust`、`featured` 和 `license` 審核中繼資料；用 `--trust` 明確覆寫信任等級。
+
+要發佈到公共目錄，可對 hub 註冊表執行 `skillhub publish --pr`（需要已登入的 `gh` CLI），或按照 [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry) 的手動 Pull Request 流程提交。
+
 ## 執行時部署
 
 支援的執行時目標：
@@ -351,6 +374,25 @@ tags:
 author: platform-team
 ```
 
+可選的相容性約束用於宣告 Skill 依賴的元件版本。每個約束由一個或多個逗號分隔的子句組成，支援 `>=`、`>`、`<=`、`<` 或精確版本：
+
+```yaml
+requires:
+  skillhub: ">=1.4.0"
+  codex: ">=0.5.0, <1.0.0"
+```
+
+`requires.skillhub` 會被強制校驗：目前執行的 skillhub 版本不滿足約束時，`install` 和 `update` 會拒絕執行（dev 建置跳過檢查）。其餘 `requires.*` 條目會做語法校驗、記錄到註冊表索引中，並由 `skillhub info` 展示。
+
+版本還可以宣告自身為破壞性變更：
+
+```yaml
+compatibility:
+  breaking: true
+```
+
+`skillhub update` 會自動套用 patch 和 minor 更新；major 版本跳躍或標記了 `compatibility.breaking` 的版本會被跳過並給出提示，需用 `skillhub update <identity> --major` 明確套用。
+
 只包含 `SKILL.md` 的既有 Skill 目錄仍然可以安裝。skill-hub 會在已安裝副本中寫入產生的 `skill.yaml`，這樣鎖定檔和部署流程可以使用同一套中繼資料模型。
 
 已安裝 Skill identity 的顯示格式為 `namespace/name`，namespace 按以下優先順序決定：
@@ -418,6 +460,7 @@ skillhub registry index generate company
 - Git 註冊表快取：`$SKILLHUB_HOME/cache/registries/<registry-name>`
 - 已安裝 Skills：`$SKILLHUB_HOME/installed/<safe-identity>`
 - 鎖定檔：`$SKILLHUB_HOME/skillhub.lock`
+- 審計日誌：`$SKILLHUB_HOME/audit.jsonl`（JSONL 格式，install/update/rollback/uninstall/deploy/publish 每次操作一條事件；用 `skillhub audit` 查看）
 - `skillhub list` 會發現的專案內 Skill 根目錄：`.skillhub/skills`、`.codex/skills`、`.claude/skills`、`.agents/skills`、`agent/skills`
 - 執行時副本：由上方執行時環境變數設定
 

@@ -20,6 +20,8 @@ type Metadata struct {
 	Entry       string
 	Targets     []string
 	Tags        []string
+	Requires    map[string]string
+	Breaking    bool
 	Generated   bool
 }
 
@@ -32,12 +34,15 @@ func LoadMetadata(dir string) (Metadata, error) {
 
 	meta := Metadata{Entry: "SKILL.md"}
 	var listKey string
+	var mapKey string
 	scanner := bufio.NewScanner(data)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		raw := scanner.Text()
+		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+		indented := raw[0] == ' ' || raw[0] == '\t'
 		if strings.HasPrefix(line, "- ") {
 			value := strings.TrimSpace(strings.TrimPrefix(line, "- "))
 			switch listKey {
@@ -54,9 +59,31 @@ func LoadMetadata(dir string) (Metadata, error) {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.Trim(strings.TrimSpace(value), `"'`)
+		if indented && mapKey == "requires" {
+			if value == "" {
+				return Metadata{}, fmt.Errorf("requires entry %q missing a version constraint", key)
+			}
+			if meta.Requires == nil {
+				meta.Requires = map[string]string{}
+			}
+			meta.Requires[key] = value
+			continue
+		}
+		if indented && mapKey == "compatibility" {
+			if key == "breaking" {
+				meta.Breaking = value == "true"
+			}
+			continue
+		}
 		listKey = ""
+		mapKey = ""
 		if value == "" {
-			listKey = key
+			switch key {
+			case "requires", "compatibility":
+				mapKey = key
+			default:
+				listKey = key
+			}
 			continue
 		}
 		switch key {

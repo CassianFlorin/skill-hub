@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -63,6 +64,22 @@ func formatRegistryList(statuses []registry.RegistryStatus) string {
 	return formatTable([]string{"Name", "Type", "Location", "Skills", "Generated At"}, rows)
 }
 
+func formatRequires(requires map[string]string) string {
+	if len(requires) == 0 {
+		return ""
+	}
+	components := make([]string, 0, len(requires))
+	for component := range requires {
+		components = append(components, component)
+	}
+	sort.Strings(components)
+	pairs := make([]string, 0, len(components))
+	for _, component := range components {
+		pairs = append(pairs, component+" "+requires[component])
+	}
+	return strings.Join(pairs, ", ")
+}
+
 func formatInfoResult(result registry.SearchResult, installCommand string) string {
 	indexed := result.Skill
 	rows := [][]string{
@@ -74,6 +91,8 @@ func formatInfoResult(result registry.SearchResult, installCommand string) strin
 		{"description", indexed.Description},
 		{"targets", strings.Join(indexed.Targets, ", ")},
 		{"tags", strings.Join(indexed.Tags, ", ")},
+		{"requires", formatRequires(indexed.Requires)},
+		{"breaking", fmt.Sprintf("%t", indexed.Breaking)},
 		{"source.type", indexed.Source.Type},
 		{"source.url", indexed.Source.URL},
 		{"source.path", indexed.Source.Path},

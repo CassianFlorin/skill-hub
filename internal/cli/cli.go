@@ -15,6 +15,7 @@ import (
 var Version = "dev"
 
 func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) error {
+	install.SkillhubVersion = Version
 	if len(args) == 0 {
 		return usage(stderr)
 	}
@@ -45,6 +46,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		}
 		_, _ = fmt.Fprintf(stdout, "installed %s@%s\n", locked.DisplayIdentity(), locked.Version)
 		return nil
+	case "publish":
+		return runPublish(args[1:], stdout, workDir)
 	case "rollback":
 		return runRollback(args[1:], stdout)
 	case "history":
@@ -65,6 +68,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return runUpdate(args[1:], stdout)
 	case "deploy":
 		return runDeploy(args[1:], stdout)
+	case "audit":
+		return runAudit(args[1:], stdout)
 	case "tui":
 		if len(args) != 1 {
 			return fmt.Errorf("usage: skillhub tui")

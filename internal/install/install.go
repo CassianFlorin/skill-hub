@@ -11,12 +11,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CassianFlorin/skill-hub/internal/audit"
 	"github.com/CassianFlorin/skill-hub/internal/config"
 	"github.com/CassianFlorin/skill-hub/internal/registry"
 	"github.com/CassianFlorin/skill-hub/internal/skill"
 )
 
 const LockFileName = "skillhub.lock"
+
+// SkillhubVersion is the running CLI version, set by the cli package.
+// Compatibility checks are skipped when it is not a semver (dev builds).
+var SkillhubVersion = "dev"
+
+func checkSkillhubRequirement(meta skill.Metadata, identity string) error {
+	constraint, ok := meta.Requires["skillhub"]
+	if !ok {
+		return nil
+	}
+	if _, comparable := skill.CompareSemver(SkillhubVersion, "0.0.0"); !comparable {
+		return nil
+	}
+	satisfied, err := skill.SatisfiesConstraint(SkillhubVersion, constraint)
+	if err != nil {
+		return fmt.Errorf("%s: invalid requires.skillhub %q: %w", identity, constraint, err)
+	}
+	if !satisfied {
+		return fmt.Errorf("%s@%s requires skillhub %s, current version is %s; upgrade skillhub or hold this skill", identity, meta.Version, constraint, SkillhubVersion)
+	}
+	return nil
+}
 
 type LockFile struct {
 	Skills []LockedSkill `json:"skills"`
@@ -50,7 +73,8 @@ type HoldState struct {
 }
 
 type UpdateOptions struct {
-	Identity string
+	Identity   string
+	AllowMajor bool
 }
 
 type UpdatePlan struct {
@@ -67,6 +91,8 @@ type UpdatePlan struct {
 	DeployedTo       []string
 	Held             bool
 	HoldReason       string
+	Major            bool
+	Breaking         bool
 }
 
 type RollbackOptions struct {
@@ -126,6 +152,21 @@ func SaveLock(lock LockFile) error {
 }
 
 func Install(workDir string, spec string) (LockedSkill, error) {
+	locked, err := installSkill(workDir, spec)
+	audit.RecordOutcome(audit.Event{
+		Command:      "install",
+		Identity:     locked.DisplayIdentity(),
+		Version:      locked.Version,
+		SourceRef:    locked.SourceRef,
+		SourceCommit: locked.SourceCommit,
+		Checksum:     locked.Checksum,
+		Registry:     locked.SourceRegistry,
+		Detail:       spec,
+	}, err)
+	return locked, err
+}
+
+func installSkill(workDir string, spec string) (LockedSkill, error) {
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return LockedSkill{}, err
@@ -141,6 +182,9 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	identity := skill.Identity(meta.Namespace, meta.Name)
 	if source.Ref != "" && source.Type != registry.SourceTypeGit && meta.Version != source.Ref {
 		return LockedSkill{}, fmt.Errorf("version %s not available for %s", source.Ref, identity)
+	}
+	if err := checkSkillhubRequirement(meta, identity); err != nil {
+		return LockedSkill{}, err
 	}
 	lock, err := LoadLock()
 	if err != nil {
@@ -195,29 +239,42 @@ func Rollback(identity string) (LockedSkill, error) {
 }
 
 func RollbackWithOptions(identity string, options RollbackOptions) (LockedSkill, error) {
+	restored, fromVersion, err := rollbackSkill(identity, options)
+	audit.RecordOutcome(audit.Event{
+		Command:     "rollback",
+		Identity:    restored.DisplayIdentity(),
+		Version:     restored.Version,
+		FromVersion: fromVersion,
+		Checksum:    restored.Checksum,
+		Detail:      identity,
+	}, err)
+	return restored, err
+}
+
+func rollbackSkill(identity string, options RollbackOptions) (LockedSkill, string, error) {
 	lock, err := LoadLock()
 	if err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
 	current, ok := lock.find(identity)
 	if !ok {
-		return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
+		return LockedSkill{}, "", fmt.Errorf("unknown installed skill %q", identity)
 	}
 	snapshot, err := historySnapshotForVersion(current.DisplayIdentity(), options.To)
 	if err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
 	if err := copyDir(snapshot.InstalledPath, current.InstalledPath); err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
 	restored := snapshot.Locked
 	restored.InstalledPath = current.InstalledPath
 	restored.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	lock.upsert(restored)
 	if err := SaveLock(lock); err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
-	return restored, nil
+	return restored, current.Version, nil
 }
 
 func History(identity string) ([]HistoryEntry, error) {
@@ -248,6 +305,17 @@ func History(identity string) ([]HistoryEntry, error) {
 }
 
 func Uninstall(identity string) (LockedSkill, error) {
+	locked, err := uninstallSkill(identity)
+	audit.RecordOutcome(audit.Event{
+		Command:  "uninstall",
+		Identity: locked.DisplayIdentity(),
+		Version:  locked.Version,
+		Detail:   identity,
+	}, err)
+	return locked, err
+}
+
+func uninstallSkill(identity string) (LockedSkill, error) {
 	lock, err := LoadLock()
 	if err != nil {
 		return LockedSkill{}, err
@@ -337,37 +405,54 @@ func HeldSkills() ([]LockedSkill, error) {
 	return held, nil
 }
 
-func UpdateAll() ([][3]string, error) {
-	lock, err := LoadLock()
-	if err != nil {
-		return nil, err
-	}
-	changes, err := updateLock(&lock, false)
-	if err != nil {
-		return nil, err
-	}
-	if err := SaveLock(lock); err != nil {
-		return nil, err
-	}
-	return changes, nil
+type SkippedUpdate struct {
+	Identity         string
+	CurrentVersion   string
+	AvailableVersion string
+	Reason           string
 }
 
-func UpdateOne(identity string) ([][3]string, error) {
+func Update(options UpdateOptions) ([][3]string, []SkippedUpdate, error) {
 	lock, err := LoadLock()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if _, ok := lock.find(identity); !ok {
-		return nil, fmt.Errorf("unknown installed skill %q", identity)
+	if options.Identity != "" {
+		if _, ok := lock.find(options.Identity); !ok {
+			return nil, nil, fmt.Errorf("unknown installed skill %q", options.Identity)
+		}
 	}
-	changes, err := updateLock(&lock, false, identity)
+	identities := []string{}
+	if options.Identity != "" {
+		identities = append(identities, options.Identity)
+	}
+	changes, skipped, err := updateLock(&lock, false, options.AllowMajor, identities...)
 	if err != nil {
-		return nil, err
+		audit.RecordOutcome(audit.Event{Command: "update", Identity: options.Identity}, err)
+		return nil, nil, err
 	}
 	if err := SaveLock(lock); err != nil {
-		return nil, err
+		audit.RecordOutcome(audit.Event{Command: "update", Identity: options.Identity}, err)
+		return nil, nil, err
 	}
-	return changes, nil
+	for _, change := range changes {
+		_ = audit.Record(audit.Event{
+			Command:     "update",
+			Identity:    change[0],
+			FromVersion: change[1],
+			Version:     change[2],
+		})
+	}
+	for _, skip := range skipped {
+		_ = audit.Record(audit.Event{
+			Command:     "update",
+			Identity:    skip.Identity,
+			FromVersion: skip.CurrentVersion,
+			Version:     skip.AvailableVersion,
+			Detail:      "skipped: " + skip.Reason,
+		})
+	}
+	return changes, skipped, nil
 }
 
 func PlanUpdates() ([][3]string, error) {
@@ -420,6 +505,8 @@ func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, erro
 			AvailablePath:    resolved.SourcePath,
 			Targets:          meta.Targets,
 			DeployedTo:       locked.DeployedTo,
+			Major:            skill.IsMajorBump(locked.Version, meta.Version),
+			Breaking:         meta.Breaking,
 		}
 		if locked.Hold != nil {
 			plan.Held = true
@@ -435,19 +522,20 @@ func planUpdateDetails(lock LockFile, options UpdateOptions) ([]UpdatePlan, erro
 	return plans, nil
 }
 
-func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string, error) {
+func updateLock(lock *LockFile, dryRun bool, allowMajor bool, identities ...string) ([][3]string, []SkippedUpdate, error) {
 	filter := ""
 	if len(identities) > 0 {
 		filter = identities[0]
 	}
 	var changes [][3]string
+	var skipped []SkippedUpdate
 	for i, locked := range lock.Skills {
 		if filter != "" && locked.DisplayIdentity() != filter && locked.Name != filter {
 			continue
 		}
 		resolved, err := resolveUpdateSource(locked, dryRun)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !dryRun {
 			lock.Skills[i].SourcePath = resolved.SourcePath
@@ -457,7 +545,7 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 		}
 		meta, err := skill.LoadCompatibleMetadata(resolved.SourcePath, resolved.SourceRegistry)
 		if err != nil {
-			return nil, fmt.Errorf("update %s: %w", locked.Name, err)
+			return nil, nil, fmt.Errorf("update %s: %w", locked.Name, err)
 		}
 		if meta.Version == locked.Version {
 			continue
@@ -465,24 +553,38 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 		if locked.Hold != nil {
 			continue
 		}
+		if err := checkSkillhubRequirement(meta, locked.DisplayIdentity()); err != nil {
+			return nil, nil, err
+		}
+		if !allowMajor {
+			if reason := confirmationReason(locked.Version, meta); reason != "" {
+				skipped = append(skipped, SkippedUpdate{
+					Identity:         locked.DisplayIdentity(),
+					CurrentVersion:   locked.Version,
+					AvailableVersion: meta.Version,
+					Reason:           reason,
+				})
+				continue
+			}
+		}
 		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})
 		if dryRun {
 			continue
 		}
 		if err := saveHistory(locked); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := copyDir(resolved.SourcePath, locked.InstalledPath); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if meta.Generated {
 			if err := skill.WriteGeneratedMetadata(locked.InstalledPath, meta); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		checksum, err := skill.ChecksumDir(locked.InstalledPath)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		identity := skill.Identity(meta.Namespace, meta.Name)
 		lock.Skills[i].Identity = identity
@@ -494,7 +596,19 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 		lock.Skills[i].Checksum = checksum
 		lock.Skills[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	return changes, nil
+	return changes, skipped, nil
+}
+
+// confirmationReason reports why an update needs explicit confirmation
+// (--major), or "" when it can be applied automatically.
+func confirmationReason(currentVersion string, meta skill.Metadata) string {
+	if meta.Breaking {
+		return "breaking change"
+	}
+	if skill.IsMajorBump(currentVersion, meta.Version) {
+		return "major update"
+	}
+	return ""
 }
 
 func resolveUpdateSource(locked LockedSkill, dryRun bool) (LockedSkill, error) {

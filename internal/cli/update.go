@@ -39,14 +39,17 @@ func runCheck(args []string, stdout io.Writer) error {
 
 func runUpdate(args []string, stdout io.Writer) error {
 	preview := false
+	allowMajor := false
 	identity := ""
 	for _, arg := range args {
 		switch arg {
 		case "--preview", "--dry-run":
 			preview = true
+		case "--major":
+			allowMajor = true
 		default:
 			if strings.HasPrefix(arg, "--") || identity != "" {
-				return fmt.Errorf("usage: skillhub update [identity] [--preview|--dry-run]")
+				return fmt.Errorf("usage: skillhub update [identity] [--major] [--preview|--dry-run]")
 			}
 			identity = arg
 		}
@@ -56,26 +59,24 @@ func runUpdate(args []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return printUpdatePreview(stdout, plans)
+		return printUpdatePreview(stdout, plans, allowMajor)
 	}
-	var changes [][3]string
-	var err error
 	plans, planErr := install.PlanUpdateDetails(install.UpdateOptions{Identity: identity})
-	if identity != "" {
-		changes, err = install.UpdateOne(identity)
-	} else {
-		changes, err = install.UpdateAll()
-	}
+	changes, skipped, err := install.Update(install.UpdateOptions{Identity: identity, AllowMajor: allowMajor})
 	if err != nil {
 		return err
 	}
 	heldSkipped := heldUpdatePlans(plans, planErr)
-	if len(changes) == 0 && len(heldSkipped) == 0 {
+	if len(changes) == 0 && len(heldSkipped) == 0 && len(skipped) == 0 {
 		_, _ = fmt.Fprintln(stdout, "all skills are current")
 		return nil
 	}
 	for _, plan := range heldSkipped {
 		_, _ = fmt.Fprintf(stdout, "skipped held %s\n", plan.Identity)
+	}
+	for _, skip := range skipped {
+		_, _ = fmt.Fprintf(stdout, "skipped %s %s -> %s (%s)\n", skip.Identity, skip.CurrentVersion, skip.AvailableVersion, skip.Reason)
+		_, _ = fmt.Fprintf(stdout, "apply it explicitly: skillhub update %s --major\n", skip.Identity)
 	}
 	for _, change := range changes {
 		_, _ = fmt.Fprintf(stdout, "updated %s %s -> %s\n", change[0], change[1], change[2])
@@ -102,15 +103,20 @@ func formatUpdatePlanTable(plans []install.UpdatePlan) string {
 	rows := make([][]string, 0, len(plans))
 	for _, plan := range plans {
 		policy := "update"
-		if plan.Held {
+		switch {
+		case plan.Held:
 			policy = "held"
+		case plan.Breaking:
+			policy = "breaking (--major)"
+		case plan.Major:
+			policy = "major (--major)"
 		}
 		rows = append(rows, []string{plan.Identity, plan.CurrentVersion, plan.AvailableVersion, policy, updatePlanSource(plan)})
 	}
 	return formatTable([]string{"Skill", "Current", "Available", "Policy", "Source"}, rows)
 }
 
-func printUpdatePreview(stdout io.Writer, plans []install.UpdatePlan) error {
+func printUpdatePreview(stdout io.Writer, plans []install.UpdatePlan, allowMajor bool) error {
 	if len(plans) == 0 {
 		_, _ = fmt.Fprintln(stdout, "all skills are current")
 		return nil
@@ -136,6 +142,14 @@ func printUpdatePreview(stdout io.Writer, plans []install.UpdatePlan) error {
 				_, _ = fmt.Fprintln(stdout, "  Held: yes")
 			}
 			_, _ = fmt.Fprintln(stdout, "  Skipped: held")
+		}
+		if !plan.Held && !allowMajor {
+			switch {
+			case plan.Breaking:
+				_, _ = fmt.Fprintf(stdout, "  Skipped: breaking change; apply with skillhub update %s --major\n", plan.Identity)
+			case plan.Major:
+				_, _ = fmt.Fprintf(stdout, "  Skipped: major update; apply with skillhub update %s --major\n", plan.Identity)
+			}
 		}
 		_, _ = fmt.Fprintf(stdout, "  Update one Skill: skillhub update %s\n", plan.Identity)
 		_, _ = fmt.Fprintf(stdout, "  Roll back after update: skillhub rollback %s\n", plan.Identity)

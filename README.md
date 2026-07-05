@@ -42,6 +42,7 @@ skill-hub separates local Skill state into three layers:
 - [Catalog Discovery](#catalog-discovery)
 - [Static Catalog Export](#static-catalog-export)
 - [Install, Update, And Rollback](#install-update-and-rollback)
+- [Publish A Skill](#publish-a-skill)
 - [Runtime Deploy](#runtime-deploy)
 - [Skill Package Format](#skill-package-format)
 - [Registry Index Format](#registry-index-format)
@@ -138,7 +139,8 @@ go build -o skillhub ./cmd/skillhub
 | Lifecycle | `skillhub install`, `skillhub list`, `skillhub check`, `skillhub update --preview`, `skillhub hold`, `skillhub holds`, `skillhub unhold`, `skillhub update`, `skillhub history`, `skillhub rollback`, `skillhub uninstall` |
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
-| Publication | `skillhub catalog export` |
+| Publication | `skillhub publish`, `skillhub catalog export` |
+| Audit | `skillhub audit` |
 
 Common examples:
 
@@ -294,6 +296,26 @@ Uninstall:
 
 By default, uninstall removes the installed store copy and lockfile entry only. Use `--deployed` to also remove Codex, Claude, Gemini, and Hermes runtime copies.
 
+## Publish A Skill
+
+`skillhub publish` validates a local Skill package, copies it into a registry, and updates `skillhub.index.json` in one step:
+
+```bash
+skillhub publish ./skills/git-commit-cn --registry company --dry-run
+skillhub publish ./skills/git-commit-cn --registry company
+skillhub publish ./skills/git-commit-cn --registry team --branch publish/git-commit-cn
+skillhub publish ./skills/git-commit-cn --registry hub --pr
+```
+
+Before writing anything, publish checks that `skill.yaml` declares an explicit `version`, a `description`, at least one supported target, and a `namespace` or `author`, then computes the package checksum. Republishing the same version with different content is rejected, and semver versions lower than the published entry are rejected; bump the version instead.
+
+- Local registries are updated in place.
+- Git registries are cloned to a temporary workspace, committed, and pushed. Use `--branch` to push a review branch when you have write access, or `--pr` to fork the registry (when needed) and open a pull request through the `gh` CLI.
+- `--dry-run` prints the index entry diff without writing.
+- Updates preserve existing `trust`, `featured`, and `license` review metadata; override trust explicitly with `--trust`.
+
+To publish into the public catalog, run `skillhub publish --pr` against the hub registry (requires an authenticated `gh` CLI), or follow the manual pull-request workflow in [skill-hub-registry](https://github.com/CassianFlorin/skill-hub-registry).
+
 ## Runtime Deploy
 
 Supported runtime targets:
@@ -371,6 +393,25 @@ tags:
 author: platform-team
 ```
 
+Optional compatibility constraints declare which component versions a Skill needs. Each constraint is one or more comma-separated clauses using `>=`, `>`, `<=`, `<`, or an exact version:
+
+```yaml
+requires:
+  skillhub: ">=1.4.0"
+  codex: ">=0.5.0, <1.0.0"
+```
+
+`requires.skillhub` is enforced: `install` and `update` refuse a Skill whose constraint the running skillhub version does not satisfy (dev builds skip the check). Other `requires.*` entries are validated for syntax, recorded in the registry index, and shown by `skillhub info`.
+
+A version can also declare itself as a breaking change:
+
+```yaml
+compatibility:
+  breaking: true
+```
+
+`skillhub update` applies patch and minor updates automatically. Major version bumps and versions marked `compatibility.breaking` are skipped with a notice; apply them explicitly with `skillhub update <identity> --major`.
+
 Existing Skill directories that only contain `SKILL.md` can still be installed. skill-hub writes a generated `skill.yaml` into the installed copy so the lockfile and deploy pipeline can use the same metadata model.
 
 Installed Skill identities are displayed as `namespace/name`, using this priority:
@@ -438,6 +479,7 @@ Generate an index for a local registry:
 - Git registry cache: `$SKILLHUB_HOME/cache/registries/<registry-name>`
 - Installed Skills: `$SKILLHUB_HOME/installed/<safe-identity>`
 - Lockfile: `$SKILLHUB_HOME/skillhub.lock`
+- Audit log: `$SKILLHUB_HOME/audit.jsonl` (JSONL, one event per install/update/rollback/uninstall/deploy/publish; view with `skillhub audit`)
 - Project-only Skill roots discovered by `skillhub list`: `.skillhub/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, and `agent/skills`
 - Runtime copies: configured by the runtime env vars listed above
 

@@ -36,20 +36,22 @@ type Index struct {
 }
 
 type IndexSkill struct {
-	Identity    string      `json:"identity"`
-	Name        string      `json:"name"`
-	Namespace   string      `json:"namespace"`
-	Version     string      `json:"version"`
-	Description string      `json:"description"`
-	Targets     []string    `json:"targets"`
-	Tags        []string    `json:"tags,omitempty"`
-	Source      IndexSource `json:"source"`
-	Maintainers []string    `json:"maintainers,omitempty"`
-	License     string      `json:"license,omitempty"`
-	Trust       IndexTrust  `json:"trust"`
-	Featured    bool        `json:"featured"`
-	UpdatedAt   string      `json:"updated_at"`
-	Checksum    string      `json:"checksum,omitempty"`
+	Identity    string            `json:"identity"`
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace"`
+	Version     string            `json:"version"`
+	Description string            `json:"description"`
+	Targets     []string          `json:"targets"`
+	Tags        []string          `json:"tags,omitempty"`
+	Requires    map[string]string `json:"requires,omitempty"`
+	Breaking    bool              `json:"breaking,omitempty"`
+	Source      IndexSource       `json:"source"`
+	Maintainers []string          `json:"maintainers,omitempty"`
+	License     string            `json:"license,omitempty"`
+	Trust       IndexTrust        `json:"trust"`
+	Featured    bool              `json:"featured"`
+	UpdatedAt   string            `json:"updated_at"`
+	Checksum    string            `json:"checksum,omitempty"`
 }
 
 type IndexSource struct {
@@ -269,6 +271,37 @@ func ResolveIndexedSkill(root string, spec string) (IndexSkill, bool, error) {
 	return IndexSkill{}, false, nil
 }
 
+func ValidTarget(target string) bool {
+	return validTarget(target)
+}
+
+func ValidTrustLevel(level string) bool {
+	return validTrustLevel(level)
+}
+
+func WriteIndex(root string, index Index) error {
+	if err := validateCatalogSchema(index); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(root, IndexFileName), data, 0o644)
+}
+
+func ValidateLoadedIndex(root string, name string) (int, error) {
+	index, err := LoadIndex(root)
+	if err != nil {
+		return 0, err
+	}
+	if err := validateRegistrySources(root, name, index); err != nil {
+		return 0, err
+	}
+	return len(index.Skills), nil
+}
+
 func LoadIndex(root string) (Index, error) {
 	data, err := os.ReadFile(filepath.Join(root, IndexFileName))
 	if err != nil {
@@ -320,6 +353,8 @@ func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
 			Description: meta.Description,
 			Targets:     meta.Targets,
 			Tags:        meta.Tags,
+			Requires:    meta.Requires,
+			Breaking:    meta.Breaking,
 			Source:      IndexSource{Type: SourceTypeRegistry, Path: filepath.ToSlash(entry.Name())},
 			Maintainers: maintainersFrom(meta),
 			Trust:       IndexTrust{Level: TrustPrivate},
@@ -380,6 +415,11 @@ func validateCatalogSchema(index Index) error {
 		for _, target := range indexed.Targets {
 			if !validTarget(target) {
 				return fmt.Errorf("index %s unsupported target %q", indexed.Identity, target)
+			}
+		}
+		for component, constraint := range indexed.Requires {
+			if err := skill.ValidateConstraint(constraint); err != nil {
+				return fmt.Errorf("index %s requires.%s: %w", indexed.Identity, component, err)
 			}
 		}
 		if indexed.Source.Type == "" || indexed.Source.Path == "" {
