@@ -5,11 +5,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/config"
-	"github.com/cassian/skill-hub/internal/deploy"
-	"github.com/cassian/skill-hub/internal/install"
-	"github.com/cassian/skill-hub/internal/registry"
-	"github.com/cassian/skill-hub/internal/tui"
+	"github.com/CassianFlorin/skill-hub/internal/config"
+	"github.com/CassianFlorin/skill-hub/internal/deploy"
+	"github.com/CassianFlorin/skill-hub/internal/install"
+	"github.com/CassianFlorin/skill-hub/internal/registry"
+	"github.com/CassianFlorin/skill-hub/internal/tui"
 )
 
 var Version = "dev"

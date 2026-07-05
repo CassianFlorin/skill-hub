@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cassian/skill-hub/internal/install"
+	"github.com/CassianFlorin/skill-hub/internal/install"
 )
 
 func TestRuntimeNames(t *testing.T) {

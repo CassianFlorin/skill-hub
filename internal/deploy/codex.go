@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cassian/skill-hub/internal/install"
-	"github.com/cassian/skill-hub/internal/skill"
+	"github.com/CassianFlorin/skill-hub/internal/install"
+	"github.com/CassianFlorin/skill-hub/internal/skill"
 )
 
 func CodexDir() (string, error) {

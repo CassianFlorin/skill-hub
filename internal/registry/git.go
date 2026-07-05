@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/config"
-	"github.com/cassian/skill-hub/internal/skill"
+	"github.com/CassianFlorin/skill-hub/internal/config"
+	"github.com/CassianFlorin/skill-hub/internal/skill"
 )
 
 func GitCachePath(name string) (string, error) {

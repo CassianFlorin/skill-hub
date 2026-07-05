@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cassian/skill-hub/internal/cli"
+	"github.com/CassianFlorin/skill-hub/internal/cli"
 )
 
 func main() {

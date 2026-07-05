@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/deploy"
+	"github.com/CassianFlorin/skill-hub/internal/deploy"
 )
 
 func deployUsage() string {

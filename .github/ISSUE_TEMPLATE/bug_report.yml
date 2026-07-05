@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a problem with the skillhub CLI, TUI, installers, or macOS app
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: skillhub version
+      description: Output of `skillhub version`
+      placeholder: v1.3.10
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and architecture, plus install method (Homebrew / npm / release archive / go install)
+      placeholder: macOS 15 arm64, Homebrew
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: The exact command you ran, the full output, and what you expected instead. `skillhub doctor` output helps for environment issues.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Relevant parts of `skillhub.yaml`, `skillhub.lock`, or registry configuration, if applicable.

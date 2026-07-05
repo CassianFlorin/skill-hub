@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cassian/skill-hub/internal/manage"
+	"github.com/CassianFlorin/skill-hub/internal/manage"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

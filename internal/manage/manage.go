@@ -4,11 +4,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cassian/skill-hub/internal/config"
-	"github.com/cassian/skill-hub/internal/deploy"
-	"github.com/cassian/skill-hub/internal/install"
-	projectskills "github.com/cassian/skill-hub/internal/project"
-	"github.com/cassian/skill-hub/internal/registry"
+	"github.com/CassianFlorin/skill-hub/internal/config"
+	"github.com/CassianFlorin/skill-hub/internal/deploy"
+	"github.com/CassianFlorin/skill-hub/internal/install"
+	projectskills "github.com/CassianFlorin/skill-hub/internal/project"
+	"github.com/CassianFlorin/skill-hub/internal/registry"
 )
 
 const (
