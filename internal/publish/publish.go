@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CassianFlorin/skill-hub/internal/audit"
 	"github.com/CassianFlorin/skill-hub/internal/config"
 	"github.com/CassianFlorin/skill-hub/internal/registry"
 	"github.com/CassianFlorin/skill-hub/internal/skill"
@@ -48,6 +49,25 @@ type Result struct {
 }
 
 func Publish(workDir string, skillPath string, opts Options) (Result, error) {
+	result, err := publishSkill(workDir, skillPath, opts)
+	if !result.DryRun || err != nil {
+		detail := result.Action
+		if result.PRURL != "" {
+			detail += " " + result.PRURL
+		}
+		audit.RecordOutcome(audit.Event{
+			Command:  "publish",
+			Identity: result.Identity,
+			Version:  result.Version,
+			Registry: opts.Registry,
+			Checksum: result.Checksum,
+			Detail:   detail,
+		}, err)
+	}
+	return result, err
+}
+
+func publishSkill(workDir string, skillPath string, opts Options) (Result, error) {
 	if opts.Registry == "" {
 		return Result{}, fmt.Errorf("publish requires --registry")
 	}

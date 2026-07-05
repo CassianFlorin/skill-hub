@@ -140,6 +140,7 @@ go build -o skillhub ./cmd/skillhub
 | Runtime deploy | `skillhub deploy codex`, `skillhub deploy claude`, `skillhub deploy gemini`, `skillhub deploy hermes`, `skillhub deploy status` |
 | Terminal UI | `skillhub tui` |
 | Publication | `skillhub publish`, `skillhub catalog export` |
+| Audit | `skillhub audit` |
 
 Common examples:
 
@@ -478,6 +479,7 @@ Generate an index for a local registry:
 - Git registry cache: `$SKILLHUB_HOME/cache/registries/<registry-name>`
 - Installed Skills: `$SKILLHUB_HOME/installed/<safe-identity>`
 - Lockfile: `$SKILLHUB_HOME/skillhub.lock`
+- Audit log: `$SKILLHUB_HOME/audit.jsonl` (JSONL, one event per install/update/rollback/uninstall/deploy/publish; view with `skillhub audit`)
 - Project-only Skill roots discovered by `skillhub list`: `.skillhub/skills`, `.codex/skills`, `.claude/skills`, `.agents/skills`, and `agent/skills`
 - Runtime copies: configured by the runtime env vars listed above
 

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/CassianFlorin/skill-hub/internal/audit"
 )
 
 func TestDisplayIdentity(t *testing.T) {
@@ -259,5 +261,52 @@ func TestUpdateAppliesMinorAutomatically(t *testing.T) {
 	}
 	if len(changes) != 1 || len(skipped) != 0 {
 		t.Fatalf("changes = %v, skipped = %v", changes, skipped)
+	}
+}
+
+func TestLifecycleWritesAuditEvents(t *testing.T) {
+	t.Setenv("SKILLHUB_HOME", t.TempDir())
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "policy")
+	writeUpdatePolicySkill(t, sourceDir, "1.0.0", false)
+	if _, err := Install(workDir, sourceDir); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	writeUpdatePolicySkill(t, sourceDir, "1.1.0", false)
+	if _, _, err := Update(UpdateOptions{}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if _, err := Rollback("acme/policy"); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+	if _, err := Uninstall("acme/policy"); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if _, err := Install(workDir, filepath.Join(sourceDir, "missing")); err == nil {
+		t.Fatal("expected failing install")
+	}
+
+	events, err := audit.List(0)
+	if err != nil {
+		t.Fatalf("audit.List: %v", err)
+	}
+	var commands []string
+	for _, event := range events {
+		commands = append(commands, event.Command+":"+event.Result)
+	}
+	want := []string{"install:ok", "update:ok", "rollback:ok", "uninstall:ok", "install:error"}
+	if len(commands) != len(want) {
+		t.Fatalf("audit commands = %v, want %v", commands, want)
+	}
+	for i := range want {
+		if commands[i] != want[i] {
+			t.Errorf("audit[%d] = %q, want %q", i, commands[i], want[i])
+		}
+	}
+	if events[1].FromVersion != "1.0.0" || events[1].Version != "1.1.0" {
+		t.Errorf("update audit event = %+v", events[1])
+	}
+	if events[2].FromVersion != "1.1.0" || events[2].Version != "1.0.0" {
+		t.Errorf("rollback audit event = %+v", events[2])
 	}
 }

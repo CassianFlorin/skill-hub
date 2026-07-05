@@ -167,6 +167,7 @@ func englishHelp() helpMessages {
 			{"check", "Check installed Skills for available updates"},
 			{"update", "Update installed Skills from their sources"},
 			{"deploy", "Copy installed Skills into runtime directories"},
+			{"audit", "Show the local audit log"},
 			{"tui", "Open the terminal management interface"},
 		},
 		Topics: englishTopics(),
@@ -201,6 +202,7 @@ func simplifiedHelp() helpMessages {
 			{"check", "检查已安装 Skill 是否有更新"},
 			{"update", "从来源更新已安装 Skill"},
 			{"deploy", "复制已安装 Skill 到运行时目录"},
+			{"audit", "查看本地审计日志"},
 			{"tui", "打开终端图形化管理界面"},
 		},
 		Topics: simplifiedTopics(),
@@ -235,6 +237,7 @@ func traditionalHelp() helpMessages {
 			{"check", "檢查已安裝 Skill 是否有更新"},
 			{"update", "從來源更新已安裝 Skill"},
 			{"deploy", "複製已安裝 Skill 到執行時目錄"},
+			{"audit", "查看本地審計日誌"},
 			{"tui", "開啟終端圖形化管理介面"},
 		},
 		Topics: traditionalTopics(),
@@ -262,6 +265,7 @@ func englishTopics() map[string]helpTopic {
 		"list":      {Usage: listUsage, Sections: []helpSection{{Title: "Scopes:", Lines: []string{"  --scope all      Show global installed Skills and project-only Skills", "  --scope global   Show Skills from $SKILLHUB_HOME/skillhub.lock", "  --scope project  Show Skills found in the current project"}}, {Title: "Project roots:", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"check":     {Usage: "usage: skillhub check [--json]", Description: "Check installed Skills for available updates without changing managed or runtime copies.", Examples: []string{"  skillhub check", "  skillhub check --json", "  skillhub update --preview"}},
 		"update":    {Usage: "usage: skillhub update [identity] [--major] [--preview|--dry-run]", Description: "Update managed store copies from recorded sources. Patch and minor updates apply automatically; major or breaking updates are skipped unless --major is given. Runtime copies are not changed until deploy runs.", Examples: []string{"  skillhub update --preview", "  skillhub update --dry-run", "  skillhub update official/git-commit-cn", "  skillhub update official/git-commit-cn --major", "  skillhub update"}},
+		"audit":     {Usage: auditUsage, Description: "Show local audit events for install, update, rollback, uninstall, deploy, and publish. Events are stored as JSONL in $SKILLHUB_HOME/audit.jsonl for SIEM ingestion.", Examples: []string{"  skillhub audit", "  skillhub audit --limit 20", "  skillhub audit --json"}},
 		"tui":       {Usage: "usage: skillhub tui", Description: "Open the terminal management interface. Managed means skillhub can update and rollback; Runtime means the copy agents load.", Examples: []string{"  skillhub tui"}},
 	}
 }
@@ -287,6 +291,7 @@ func simplifiedTopics() map[string]helpTopic {
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "范围：", Lines: []string{"  --scope all      显示全局已安装 Skill 和项目内 Skill", "  --scope global   显示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  显示当前项目中的 Skill"}}, {Title: "项目目录：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"check":     {Usage: "用法：skillhub check [--json]", Description: "只检查已安装 Skill 是否有更新，不修改托管副本或运行时目录。", Examples: []string{"  skillhub check", "  skillhub update --preview"}},
 		"update":    {Usage: "用法：skillhub update [identity] [--major] [--preview|--dry-run]", Description: "只更新 skillhub 托管副本，不会修改 Codex、Claude、Gemini 或 Hermes 运行时目录。patch/minor 更新自动应用；major 或 breaking 更新需加 --major。", Examples: []string{"  skillhub update --preview", "  skillhub update --dry-run", "  skillhub update official/git-commit-cn", "  skillhub update official/git-commit-cn --major", "  skillhub update"}},
+		"audit":     {Usage: "用法：skillhub audit [--limit <n>] [--json]", Description: "查看 install、update、rollback、uninstall、deploy 和 publish 的本地审计事件。事件以 JSONL 格式存储在 $SKILLHUB_HOME/audit.jsonl，便于接入 SIEM。", Examples: []string{"  skillhub audit", "  skillhub audit --limit 20", "  skillhub audit --json"}},
 		"tui":       {Usage: "用法：skillhub tui", Description: "打开终端图形化管理界面。Managed 表示 skillhub 可更新和回滚；Runtime 表示 Agent 实际加载的副本。", Examples: []string{"  skillhub tui"}},
 	}
 }
@@ -312,6 +317,7 @@ func traditionalTopics() map[string]helpTopic {
 		"list":      {Usage: "用法：" + listUsage[len("usage: "):], Sections: []helpSection{{Title: "範圍：", Lines: []string{"  --scope all      顯示全域已安裝 Skill 和專案內 Skill", "  --scope global   顯示 $SKILLHUB_HOME/skillhub.lock 中的 Skill", "  --scope project  顯示目前專案中的 Skill"}}, {Title: "專案目錄：", Lines: []string{"  .skillhub/skills, .codex/skills, .claude/skills, .agents/skills, agent/skills"}}}, Examples: []string{"  skillhub list", "  skillhub list --scope global", "  skillhub list --scope project"}},
 		"check":     {Usage: "用法：skillhub check [--json]", Description: "只檢查已安裝 Skill 是否有更新，不修改託管副本或執行時目錄。", Examples: []string{"  skillhub check", "  skillhub update --preview"}},
 		"update":    {Usage: "用法：skillhub update [identity] [--major] [--preview|--dry-run]", Description: "只更新 skillhub 託管副本，不會修改 Codex、Claude、Gemini 或 Hermes 執行時目錄。patch/minor 更新自動套用；major 或 breaking 更新需加 --major。", Examples: []string{"  skillhub update --preview", "  skillhub update --dry-run", "  skillhub update official/git-commit-cn", "  skillhub update official/git-commit-cn --major", "  skillhub update"}},
+		"audit":     {Usage: "用法：skillhub audit [--limit <n>] [--json]", Description: "查看 install、update、rollback、uninstall、deploy 和 publish 的本地審計事件。事件以 JSONL 格式儲存在 $SKILLHUB_HOME/audit.jsonl，便於接入 SIEM。", Examples: []string{"  skillhub audit", "  skillhub audit --limit 20", "  skillhub audit --json"}},
 		"tui":       {Usage: "用法：skillhub tui", Description: "開啟終端圖形化管理介面。Managed 表示 skillhub 可更新和回滾；Runtime 表示 Agent 實際載入的副本。", Examples: []string{"  skillhub tui"}},
 	}
 }

@@ -68,6 +68,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) erro
 		return runUpdate(args[1:], stdout)
 	case "deploy":
 		return runDeploy(args[1:], stdout)
+	case "audit":
+		return runAudit(args[1:], stdout)
 	case "tui":
 		if len(args) != 1 {
 			return fmt.Errorf("usage: skillhub tui")

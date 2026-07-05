@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CassianFlorin/skill-hub/internal/audit"
 	"github.com/CassianFlorin/skill-hub/internal/config"
 	"github.com/CassianFlorin/skill-hub/internal/registry"
 	"github.com/CassianFlorin/skill-hub/internal/skill"
@@ -151,6 +152,21 @@ func SaveLock(lock LockFile) error {
 }
 
 func Install(workDir string, spec string) (LockedSkill, error) {
+	locked, err := installSkill(workDir, spec)
+	audit.RecordOutcome(audit.Event{
+		Command:      "install",
+		Identity:     locked.DisplayIdentity(),
+		Version:      locked.Version,
+		SourceRef:    locked.SourceRef,
+		SourceCommit: locked.SourceCommit,
+		Checksum:     locked.Checksum,
+		Registry:     locked.SourceRegistry,
+		Detail:       spec,
+	}, err)
+	return locked, err
+}
+
+func installSkill(workDir string, spec string) (LockedSkill, error) {
 	cfg, err := config.Load(workDir)
 	if err != nil {
 		return LockedSkill{}, err
@@ -223,29 +239,42 @@ func Rollback(identity string) (LockedSkill, error) {
 }
 
 func RollbackWithOptions(identity string, options RollbackOptions) (LockedSkill, error) {
+	restored, fromVersion, err := rollbackSkill(identity, options)
+	audit.RecordOutcome(audit.Event{
+		Command:     "rollback",
+		Identity:    restored.DisplayIdentity(),
+		Version:     restored.Version,
+		FromVersion: fromVersion,
+		Checksum:    restored.Checksum,
+		Detail:      identity,
+	}, err)
+	return restored, err
+}
+
+func rollbackSkill(identity string, options RollbackOptions) (LockedSkill, string, error) {
 	lock, err := LoadLock()
 	if err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
 	current, ok := lock.find(identity)
 	if !ok {
-		return LockedSkill{}, fmt.Errorf("unknown installed skill %q", identity)
+		return LockedSkill{}, "", fmt.Errorf("unknown installed skill %q", identity)
 	}
 	snapshot, err := historySnapshotForVersion(current.DisplayIdentity(), options.To)
 	if err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
 	if err := copyDir(snapshot.InstalledPath, current.InstalledPath); err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
 	restored := snapshot.Locked
 	restored.InstalledPath = current.InstalledPath
 	restored.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	lock.upsert(restored)
 	if err := SaveLock(lock); err != nil {
-		return LockedSkill{}, err
+		return LockedSkill{}, "", err
 	}
-	return restored, nil
+	return restored, current.Version, nil
 }
 
 func History(identity string) ([]HistoryEntry, error) {
@@ -276,6 +305,17 @@ func History(identity string) ([]HistoryEntry, error) {
 }
 
 func Uninstall(identity string) (LockedSkill, error) {
+	locked, err := uninstallSkill(identity)
+	audit.RecordOutcome(audit.Event{
+		Command:  "uninstall",
+		Identity: locked.DisplayIdentity(),
+		Version:  locked.Version,
+		Detail:   identity,
+	}, err)
+	return locked, err
+}
+
+func uninstallSkill(identity string) (LockedSkill, error) {
 	lock, err := LoadLock()
 	if err != nil {
 		return LockedSkill{}, err
@@ -388,10 +428,29 @@ func Update(options UpdateOptions) ([][3]string, []SkippedUpdate, error) {
 	}
 	changes, skipped, err := updateLock(&lock, false, options.AllowMajor, identities...)
 	if err != nil {
+		audit.RecordOutcome(audit.Event{Command: "update", Identity: options.Identity}, err)
 		return nil, nil, err
 	}
 	if err := SaveLock(lock); err != nil {
+		audit.RecordOutcome(audit.Event{Command: "update", Identity: options.Identity}, err)
 		return nil, nil, err
+	}
+	for _, change := range changes {
+		_ = audit.Record(audit.Event{
+			Command:     "update",
+			Identity:    change[0],
+			FromVersion: change[1],
+			Version:     change[2],
+		})
+	}
+	for _, skip := range skipped {
+		_ = audit.Record(audit.Event{
+			Command:     "update",
+			Identity:    skip.Identity,
+			FromVersion: skip.CurrentVersion,
+			Version:     skip.AvailableVersion,
+			Detail:      "skipped: " + skip.Reason,
+		})
 	}
 	return changes, skipped, nil
 }

@@ -76,6 +76,8 @@ skillhub info hub/official/git-commit-cn
 skillhub install hub/official/git-commit-cn
 skillhub deploy codex official/git-commit-cn --force
 skillhub deploy status
+
+skillhub audit --limit 20
 ```
 
 `skillhub help` 支持英语、简体中文和繁体中文：
@@ -458,6 +460,7 @@ skillhub registry index generate company
 - Git 注册表缓存：`$SKILLHUB_HOME/cache/registries/<registry-name>`
 - 已安装 Skills：`$SKILLHUB_HOME/installed/<safe-identity>`
 - 锁文件：`$SKILLHUB_HOME/skillhub.lock`
+- 审计日志：`$SKILLHUB_HOME/audit.jsonl`（JSONL 格式，install/update/rollback/uninstall/deploy/publish 每次操作一条事件；用 `skillhub audit` 查看）
 - `skillhub list` 会发现的项目内 Skill 根目录：`.skillhub/skills`、`.codex/skills`、`.claude/skills`、`.agents/skills`、`agent/skills`
 - 运行时副本：由上方运行时环境变量配置
 
