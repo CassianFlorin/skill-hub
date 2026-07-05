@@ -18,6 +18,28 @@ import (
 
 const LockFileName = "skillhub.lock"
 
+// SkillhubVersion is the running CLI version, set by the cli package.
+// Compatibility checks are skipped when it is not a semver (dev builds).
+var SkillhubVersion = "dev"
+
+func checkSkillhubRequirement(meta skill.Metadata, identity string) error {
+	constraint, ok := meta.Requires["skillhub"]
+	if !ok {
+		return nil
+	}
+	if _, comparable := skill.CompareSemver(SkillhubVersion, "0.0.0"); !comparable {
+		return nil
+	}
+	satisfied, err := skill.SatisfiesConstraint(SkillhubVersion, constraint)
+	if err != nil {
+		return fmt.Errorf("%s: invalid requires.skillhub %q: %w", identity, constraint, err)
+	}
+	if !satisfied {
+		return fmt.Errorf("%s@%s requires skillhub %s, current version is %s; upgrade skillhub or hold this skill", identity, meta.Version, constraint, SkillhubVersion)
+	}
+	return nil
+}
+
 type LockFile struct {
 	Skills []LockedSkill `json:"skills"`
 }
@@ -141,6 +163,9 @@ func Install(workDir string, spec string) (LockedSkill, error) {
 	identity := skill.Identity(meta.Namespace, meta.Name)
 	if source.Ref != "" && source.Type != registry.SourceTypeGit && meta.Version != source.Ref {
 		return LockedSkill{}, fmt.Errorf("version %s not available for %s", source.Ref, identity)
+	}
+	if err := checkSkillhubRequirement(meta, identity); err != nil {
+		return LockedSkill{}, err
 	}
 	lock, err := LoadLock()
 	if err != nil {
@@ -464,6 +489,9 @@ func updateLock(lock *LockFile, dryRun bool, identities ...string) ([][3]string,
 		}
 		if locked.Hold != nil {
 			continue
+		}
+		if err := checkSkillhubRequirement(meta, locked.DisplayIdentity()); err != nil {
+			return nil, err
 		}
 		changes = append(changes, [3]string{locked.displayIdentity(), locked.Version, meta.Version})
 		if dryRun {

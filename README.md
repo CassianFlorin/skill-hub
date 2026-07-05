@@ -392,6 +392,16 @@ tags:
 author: platform-team
 ```
 
+Optional compatibility constraints declare which component versions a Skill needs. Each constraint is one or more comma-separated clauses using `>=`, `>`, `<=`, `<`, or an exact version:
+
+```yaml
+requires:
+  skillhub: ">=1.4.0"
+  codex: ">=0.5.0, <1.0.0"
+```
+
+`requires.skillhub` is enforced: `install` and `update` refuse a Skill whose constraint the running skillhub version does not satisfy (dev builds skip the check). Other `requires.*` entries are validated for syntax, recorded in the registry index, and shown by `skillhub info`.
+
 Existing Skill directories that only contain `SKILL.md` can still be installed. skill-hub writes a generated `skill.yaml` into the installed copy so the lockfile and deploy pipeline can use the same metadata model.
 
 Installed Skill identities are displayed as `namespace/name`, using this priority:

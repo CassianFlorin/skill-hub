@@ -15,6 +15,7 @@ import (
 var Version = "dev"
 
 func Run(args []string, stdout io.Writer, stderr io.Writer, workDir string) error {
+	install.SkillhubVersion = Version
 	if len(args) == 0 {
 		return usage(stderr)
 	}

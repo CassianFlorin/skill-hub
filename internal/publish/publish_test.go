@@ -176,33 +176,6 @@ func TestPublishLowerVersionFails(t *testing.T) {
 	}
 }
 
-func TestCompareSemver(t *testing.T) {
-	cases := []struct {
-		left       string
-		right      string
-		cmp        int
-		comparable bool
-	}{
-		{"1.0.0", "1.0.0", 0, true},
-		{"v1.0.0", "1.0.0", 0, true},
-		{"1.0.1", "1.0.0", 1, true},
-		{"1.2.0", "1.10.0", -1, true},
-		{"2.0.0-rc.1", "2.0.0", -1, true},
-		{"2.0.0", "2.0.0-rc.1", 1, true},
-		{"2.0.0-alpha", "2.0.0-beta", -1, true},
-		{"1.0.0+build.5", "1.0.0", 0, true},
-		{"latest", "1.0.0", 0, false},
-		{"1.0", "1.0.0", 0, false},
-		{"1.0.x", "1.0.0", 0, false},
-	}
-	for _, testCase := range cases {
-		cmp, comparable := compareSemver(testCase.left, testCase.right)
-		if cmp != testCase.cmp || comparable != testCase.comparable {
-			t.Errorf("compareSemver(%q, %q) = (%d, %v), want (%d, %v)", testCase.left, testCase.right, cmp, comparable, testCase.cmp, testCase.comparable)
-		}
-	}
-}
-
 func TestPublishDryRunWritesNothing(t *testing.T) {
 	workDir, registryDir := setupLocalRegistry(t)
 	skillDir := writeSkill(t, t.TempDir(), "review", "1.0.0", "# review\n")
@@ -518,5 +491,44 @@ func TestPublishPRRequiresGitRegistry(t *testing.T) {
 	skillDir := writeSkill(t, t.TempDir(), "review", "1.0.0", "# review\n")
 	if _, err := Publish(workDir, skillDir, Options{Registry: "company", PR: true}); err == nil || !strings.Contains(err.Error(), "--pr requires a git registry") {
 		t.Errorf("expected git registry error, got %v", err)
+	}
+}
+
+func writeSkillWithRequires(t *testing.T, dir string, requires string) string {
+	t.Helper()
+	skillDir := filepath.Join(dir, "review")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("mkdir skill: %v", err)
+	}
+	yaml := "name: review\nnamespace: acme\nversion: 1.0.0\ndescription: d\ntargets:\n- codex\nrequires:\n  skillhub: \"" + requires + "\"\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "skill.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write skill.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# review\n"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+	return skillDir
+}
+
+func TestPublishCarriesRequiresIntoIndex(t *testing.T) {
+	workDir, registryDir := setupLocalRegistry(t)
+	skillDir := writeSkillWithRequires(t, t.TempDir(), ">=1.4.0")
+	if _, err := Publish(workDir, skillDir, Options{Registry: "company"}); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	index, err := registry.LoadIndex(registryDir)
+	if err != nil {
+		t.Fatalf("LoadIndex: %v", err)
+	}
+	if index.Skills[0].Requires["skillhub"] != ">=1.4.0" {
+		t.Errorf("index requires = %v", index.Skills[0].Requires)
+	}
+}
+
+func TestPublishRejectsInvalidRequires(t *testing.T) {
+	workDir, _ := setupLocalRegistry(t)
+	skillDir := writeSkillWithRequires(t, t.TempDir(), "~1.4.0")
+	if _, err := Publish(workDir, skillDir, Options{Registry: "company"}); err == nil || !strings.Contains(err.Error(), "requires.skillhub") {
+		t.Errorf("expected invalid constraint error, got %v", err)
 	}
 }

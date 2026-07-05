@@ -3,6 +3,7 @@ package install
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -123,5 +124,40 @@ func TestInferCachedSource(t *testing.T) {
 	}
 	if subpath != "skills/git-commit" {
 		t.Errorf("subpath = %q, want skills/git-commit", subpath)
+	}
+}
+
+func TestInstallRejectsUnsatisfiedSkillhubRequirement(t *testing.T) {
+	t.Setenv("SKILLHUB_HOME", t.TempDir())
+	workDir := t.TempDir()
+	skillDir := filepath.Join(t.TempDir(), "review")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	yaml := "name: review\nnamespace: acme\nversion: 1.0.0\ndescription: d\ntargets:\n- codex\nrequires:\n  skillhub: \">=9.0.0\"\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "skill.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write skill.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# review\n"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+
+	previousVersion := SkillhubVersion
+	t.Cleanup(func() { SkillhubVersion = previousVersion })
+
+	SkillhubVersion = "v1.3.11"
+	if _, err := Install(workDir, skillDir); err == nil || !strings.Contains(err.Error(), "requires skillhub >=9.0.0") {
+		t.Errorf("expected requirement error, got %v", err)
+	}
+
+	SkillhubVersion = "dev"
+	if _, err := Install(workDir, skillDir); err != nil {
+		t.Errorf("dev build should skip requirement check, got %v", err)
+	}
+
+	SkillhubVersion = "v9.1.0"
+	t.Setenv("SKILLHUB_HOME", t.TempDir())
+	if _, err := Install(workDir, skillDir); err != nil {
+		t.Errorf("satisfied requirement should install, got %v", err)
 	}
 }

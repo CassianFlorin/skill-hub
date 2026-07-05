@@ -372,6 +372,16 @@ tags:
 author: platform-team
 ```
 
+可选的兼容性约束用于声明 Skill 依赖的组件版本。每个约束由一个或多个逗号分隔的子句组成，支持 `>=`、`>`、`<=`、`<` 或精确版本：
+
+```yaml
+requires:
+  skillhub: ">=1.4.0"
+  codex: ">=0.5.0, <1.0.0"
+```
+
+`requires.skillhub` 会被强制校验：当前运行的 skillhub 版本不满足约束时，`install` 和 `update` 会拒绝执行（dev 构建跳过检查）。其余 `requires.*` 条目会做语法校验、记录到注册表索引中，并由 `skillhub info` 展示。
+
 只包含 `SKILL.md` 的既有 Skill 目录仍然可以安装。skill-hub 会在已安装副本中写入生成的 `skill.yaml`，这样锁文件和部署流程可以使用同一套元数据模型。
 
 已安装 Skill identity 的显示格式为 `namespace/name`，namespace 按以下优先级确定：

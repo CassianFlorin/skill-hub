@@ -36,20 +36,21 @@ type Index struct {
 }
 
 type IndexSkill struct {
-	Identity    string      `json:"identity"`
-	Name        string      `json:"name"`
-	Namespace   string      `json:"namespace"`
-	Version     string      `json:"version"`
-	Description string      `json:"description"`
-	Targets     []string    `json:"targets"`
-	Tags        []string    `json:"tags,omitempty"`
-	Source      IndexSource `json:"source"`
-	Maintainers []string    `json:"maintainers,omitempty"`
-	License     string      `json:"license,omitempty"`
-	Trust       IndexTrust  `json:"trust"`
-	Featured    bool        `json:"featured"`
-	UpdatedAt   string      `json:"updated_at"`
-	Checksum    string      `json:"checksum,omitempty"`
+	Identity    string            `json:"identity"`
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace"`
+	Version     string            `json:"version"`
+	Description string            `json:"description"`
+	Targets     []string          `json:"targets"`
+	Tags        []string          `json:"tags,omitempty"`
+	Requires    map[string]string `json:"requires,omitempty"`
+	Source      IndexSource       `json:"source"`
+	Maintainers []string          `json:"maintainers,omitempty"`
+	License     string            `json:"license,omitempty"`
+	Trust       IndexTrust        `json:"trust"`
+	Featured    bool              `json:"featured"`
+	UpdatedAt   string            `json:"updated_at"`
+	Checksum    string            `json:"checksum,omitempty"`
 }
 
 type IndexSource struct {
@@ -351,6 +352,7 @@ func GenerateIndex(name string, reg config.Registry) (Index, string, error) {
 			Description: meta.Description,
 			Targets:     meta.Targets,
 			Tags:        meta.Tags,
+			Requires:    meta.Requires,
 			Source:      IndexSource{Type: SourceTypeRegistry, Path: filepath.ToSlash(entry.Name())},
 			Maintainers: maintainersFrom(meta),
 			Trust:       IndexTrust{Level: TrustPrivate},
@@ -411,6 +413,11 @@ func validateCatalogSchema(index Index) error {
 		for _, target := range indexed.Targets {
 			if !validTarget(target) {
 				return fmt.Errorf("index %s unsupported target %q", indexed.Identity, target)
+			}
+		}
+		for component, constraint := range indexed.Requires {
+			if err := skill.ValidateConstraint(constraint); err != nil {
+				return fmt.Errorf("index %s requires.%s: %w", indexed.Identity, component, err)
 			}
 		}
 		if indexed.Source.Type == "" || indexed.Source.Path == "" {

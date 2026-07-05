@@ -372,6 +372,16 @@ tags:
 author: platform-team
 ```
 
+可選的相容性約束用於宣告 Skill 依賴的元件版本。每個約束由一個或多個逗號分隔的子句組成，支援 `>=`、`>`、`<=`、`<` 或精確版本：
+
+```yaml
+requires:
+  skillhub: ">=1.4.0"
+  codex: ">=0.5.0, <1.0.0"
+```
+
+`requires.skillhub` 會被強制校驗：目前執行的 skillhub 版本不滿足約束時，`install` 和 `update` 會拒絕執行（dev 建置跳過檢查）。其餘 `requires.*` 條目會做語法校驗、記錄到註冊表索引中，並由 `skillhub info` 展示。
+
 只包含 `SKILL.md` 的既有 Skill 目錄仍然可以安裝。skill-hub 會在已安裝副本中寫入產生的 `skill.yaml`，這樣鎖定檔和部署流程可以使用同一套中繼資料模型。
 
 已安裝 Skill identity 的顯示格式為 `namespace/name`，namespace 按以下優先順序決定：
