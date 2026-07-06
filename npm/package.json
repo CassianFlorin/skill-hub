@@ -1,6 +1,6 @@
 {
   "name": "@cassianflorin/skillhub",
-  "version": "1.3.11",
+  "version": "1.4.0",
   "description": "Skill package manager for AI agents.",
   "license": "MIT",
   "homepage": "https://github.com/CassianFlorin/skill-hub#readme",

@@ -18,7 +18,7 @@ Install, version, update, roll back, and deploy Skills across Codex, Claude, Gem
 
 `skill-hub` treats a Skill as an installable package with metadata, registry indexing, lockfile state, rollback history, and runtime deploy targets.
 
-Current release line: `v1.3.x`.
+Current release line: `v1.4.x`.
 
 ## Does This Manage My Existing Skills?
 
@@ -90,7 +90,7 @@ npm update -g @cassianflorin/skillhub
 Every tagged release also attaches an npm tarball. Use the release URL when you need to pin or mirror a specific release:
 
 ```bash
-VERSION=1.3.11
+VERSION=1.4.0
 npm install -g "https://github.com/CassianFlorin/skill-hub/releases/download/v${VERSION}/cassianflorin-skillhub-${VERSION}.tgz"
 ```
 
@@ -514,9 +514,9 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 
 ## Version Policy
 
-`v1.3.x` is the hardening line for the current public installer flow. Patch releases in this line should keep tightening installation, update, rollback, and release reliability without changing the package model.
+`v1.4.x` is the current feature line: it introduces Skill publishing (`skillhub publish`, including the fork-and-PR flow), `requires.*` / `compatibility.breaking` compatibility enforcement, the major-update confirmation policy, and the local audit log. Patch releases in this line should harden these flows without changing the package model.
 
-Use the next available `v1.3.x` patch tag for installer and CLI hardening. Keep `v1.4.0` reserved for the first broader team rollout once the `v1.3.x` CLI and installer experience is stable enough.
+Use the next available `v1.4.x` patch tag for publishing and compatibility hardening. Keep `v1.5.0` reserved for registry signing and trust-policy work.
 
 ## Release
 
@@ -530,7 +530,7 @@ Tagged releases publish multi-platform archives through GitHub Actions. The same
 - `Formula/skillhub.rb` in this repository can be refreshed with `scripts/generate-homebrew-formula.sh` when cutting a release.
 
 ```bash
-NEXT_TAG=v1.3.11
+NEXT_TAG=v1.4.0
 git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
 git push origin "${NEXT_TAG}"
 ```
@@ -539,7 +539,7 @@ The npm package version is set from the Git tag during release. The package down
 
 Homebrew requires formulae to live in a tap. The checked-in `Formula/skillhub.rb` mirrors the latest release formula and is the source used for the `CassianFlorin/homebrew-tap` publication path.
 
-If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.3.11`.
+If release assets already exist and only npm or Homebrew publishing needs to be retried after configuring secrets, run the `Publish Installers` workflow manually with the existing tag, such as `v1.4.0`.
 
 ## Contributing
 

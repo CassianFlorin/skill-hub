@@ -4,7 +4,7 @@
 
 `skill-hub` 是面向 AI Agent 的 Skill 套件管理器。它把 Skill 當作可安裝的軟體套件來管理，支援中繼資料、註冊表索引、鎖定檔狀態、還原歷史和執行時部署目標。
 
-目前發佈線：`v1.3.x`。
+目前發佈線：`v1.4.x`。
 
 ## 功能概覽
 
@@ -495,9 +495,9 @@ export SKILLHUB_GEMINI_DIR="$PWD/.skillhub-e2e/gemini"
 
 ## 版本策略
 
-`v1.3.x` 是目前公開安裝流程的打磨線。這個系列的 patch release 應繼續收口安裝、更新、還原和發佈可靠性，不變更 Skill 包模型。
+`v1.4.x` 是目前功能線：引入了 Skill 發佈（`skillhub publish`，含 fork + PR 流程）、`requires.*` / `compatibility.breaking` 相容性強校驗、major 更新確認策略和本地審計日誌。這個系列的 patch release 應繼續收口這些流程，不變更 Skill 包模型。
 
-安裝器和 CLI 打磨繼續使用下一個可用的 `v1.3.x` patch tag。`v1.4.0` 保留為第一次更廣泛團隊更新/推廣的版本，等 `v1.3.x` 的 CLI 和安裝體驗穩定後再發佈。
+發佈與相容性打磨繼續使用下一個可用的 `v1.4.x` patch tag。`v1.5.0` 保留給註冊表簽名與 trust policy。
 
 ## 發佈
 
@@ -511,7 +511,7 @@ Tagged releases 會透過 GitHub Actions 發佈多平台歸檔。同一個 relea
 - `Formula/skillhub.rb` 可以在發佈時透過 `scripts/generate-homebrew-formula.sh` 重新整理。
 
 ```bash
-NEXT_TAG=v1.3.11
+NEXT_TAG=v1.4.0
 git tag -a "${NEXT_TAG}" -m "${NEXT_TAG}"
 git push origin "${NEXT_TAG}"
 ```
@@ -520,7 +520,7 @@ npm 包版本會從 Git tag 設定。安裝時 npm 包會在 `postinstall` 中�
 
 Homebrew 要求 formula 位於 tap 中。倉庫中的 `Formula/skillhub.rb` 鏡像最新 release formula，並作為 `CassianFlorin/homebrew-tap` 發佈路徑的來源。
 
-如果 release assets 已經存在，只需要在設定 secrets 後重試 npm 或 Homebrew 發佈，可以手動執行 `Publish Installers` workflow，並輸入既有 tag，例如 `v1.3.11`。
+如果 release assets 已經存在，只需要在設定 secrets 後重試 npm 或 Homebrew 發佈，可以手動執行 `Publish Installers` workflow，並輸入既有 tag，例如 `v1.4.0`。
 
 ## 貢獻與授權條款
 
